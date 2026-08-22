@@ -42,3 +42,68 @@ jobs:
       - name: Clippy
         if: steps.workspace.outputs.present == 'true'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  moose-backend:
+    needs: rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.80.0
+      - name: Install Miniforge
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/miniforge.sh" \
+            https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+          bash "$RUNNER_TEMP/miniforge.sh" -b -p "$RUNNER_TEMP/miniforge"
+          echo "$RUNNER_TEMP/miniforge/bin" >> "$GITHUB_PATH"
+      - name: Install exact MOOSE evidence target
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/miniforge/bin/conda" create -y \
+            -p "$RUNNER_TEMP/moose-env" \
+            --override-channels \
+            -c https://conda.software.inl.gov/public \
+            -c conda-forge \
+            'moose=2026.08.12=mpich'
+          echo "SOL_MOOSE_EXECUTABLE=$RUNNER_TEMP/moose-env/bin/moose-opt" >> "$GITHUB_ENV"
+          echo "SOL_MOOSE_CONDA_PREFIX=$RUNNER_TEMP/moose-env" >> "$GITHUB_ENV"
+          mkdir -p target
+          "$RUNNER_TEMP/miniforge/bin/conda" list -p "$RUNNER_TEMP/moose-env" --json \
+            > target/phase1-conda-list.json
+          metadata=$(find "$RUNNER_TEMP/moose-env/conda-meta" -maxdepth 1 \
+            -name 'moose-*.json' -print -quit)
+          test -n "$metadata"
+          cp "$metadata" target/phase1-moose-conda-meta.json
+      - name: Verify retained package archive when available
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='d7b2eec6b958f11455c903b70a16ea319b7edb68b4499537313c06785abd05b3'
+          archive=$(find "$RUNNER_TEMP/miniforge/pkgs" -maxdepth 1 \
+            -name 'moose-2026.08.12-mpich.conda' -print -quit || true)
+          if [[ -n "$archive" ]]; then
+            actual=$(sha256sum "$archive" | awk '{print $1}')
+            printf 'expected=%s\nactual=%s\narchive=%s\n' "$expected" "$actual" "$archive" \
+              | tee target/phase1-package-sha256.txt
+            test "$actual" = "$expected"
+          else
+            printf 'expected=%s\narchive=not-retained-by-conda-cache\n' "$expected" \
+              | tee target/phase1-package-sha256.txt
+          fi
+      - name: Exact backend probe and input validation
+        run: cargo test --test moose_probe --locked -- --nocapture
+      - name: Preserve Phase 1 backend evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-moose-backend-evidence
+          if-no-files-found: warn
+          path: |
+            target/phase1-moose-probe.json
+            target/phase1-moose-conda-meta.json
+            target/phase1-conda-list.json
+            target/phase1-package-sha256.txt
