@@ -78,7 +78,9 @@ pub struct Outputs {
 impl MooseInputModel {
     pub fn validate(&self) -> Result<(), IrError> {
         if self.mesh.nx == 0 {
-            return Err(IrError::InvalidMesh("nx must be greater than zero".to_owned()));
+            return Err(IrError::InvalidMesh(
+                "nx must be greater than zero".to_owned(),
+            ));
         }
         require_finite("mesh.xmin", self.mesh.xmin)?;
         require_finite("mesh.xmax", self.mesh.xmax)?;
