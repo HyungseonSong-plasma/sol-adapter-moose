@@ -46,7 +46,10 @@ fn describe_adapter_emits_one_protocol_frame_and_no_stderr() {
         response["result"]["payload"]["bootstrap"]["supported_public_contract_versions"][0],
         "0.1"
     );
-    assert_eq!(response["result"]["payload"]["targets"], Value::Array(vec![]));
+    assert_eq!(
+        response["result"]["payload"]["targets"],
+        Value::Array(vec![])
+    );
 }
 
 #[test]
