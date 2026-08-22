@@ -1,9 +1,9 @@
-use sol_adaptor_moose::FoundationAdapter;
 use sol_adapter_protocol::{ExecutePlanRequest, ProtocolFailure, ValidatePlanRequest};
 use sol_adapter_transport::{
     decode_request, AdapterTransportMethod, JsonRpcResponse, RequestDisposition, StdioFrameDecoder,
     TransportRequest,
 };
+use sol_adaptor_moose::FoundationAdapter;
 use std::io::{self, Read, Write};
 use std::process;
 
