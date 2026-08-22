@@ -15,19 +15,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Detect Rust workspace
+        id: workspace
+        shell: bash
+        run: |
+          if [[ -f Cargo.toml ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Rust workspace is not present on this revision; bootstrap workflow only."
+          fi
       - uses: dtolnay/rust-toolchain@master
+        if: steps.workspace.outputs.present == 'true'
         with:
           toolchain: 1.80.0
           components: rustfmt, clippy
       - name: Generate dependency lock
+        if: steps.workspace.outputs.present == 'true'
         run: cargo generate-lockfile
       - name: Formatting
+        if: steps.workspace.outputs.present == 'true'
         run: cargo fmt --all --check
       - name: Tests
+        if: steps.workspace.outputs.present == 'true'
         run: cargo test --workspace
       - name: Clippy
+        if: steps.workspace.outputs.present == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Preserve generated lockfile
+        if: steps.workspace.outputs.present == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: phase0-cargo-lock
