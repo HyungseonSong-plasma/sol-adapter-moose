@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+pub mod backend;
+
 use sol_adapter_protocol::{
     protocol_diagnostic, ActionExecutionReport, ActionExecutionState, AdapterBootstrap,
     AdapterDescription, AdapterProtocolDiagnosticContext, ExecutePlanRequest, ExecutePlanResponse,
@@ -9,11 +11,12 @@ use sol_adapter_protocol::{
 };
 use sol_public_contract::{Diagnostic, PUBLIC_CONTRACT_VERSION};
 
-/// Phase-0 adapter host.
+/// Early adapter host before canonical SOL-to-MOOSE mapping support is accepted.
 ///
-/// It intentionally declares no MOOSE target until A0.1 Phase 1 records exact
-/// executable/package evidence. This avoids converting an unverified backend
-/// assumption into Protocol target/capability evidence.
+/// Phase 1 may establish exact MOOSE package/executable evidence, but backend
+/// presence alone is not sufficient to declare a solver-neutral SOL target or
+/// semantic capability. Target/capability declarations therefore stay empty
+/// until the applicable mapping contract is established and tested.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FoundationAdapter;
 
@@ -65,7 +68,7 @@ impl FoundationAdapter {
         let diagnostics = vec![
             protocol_diagnostic(
                 DIAGNOSTIC_TARGET_MISMATCH,
-                "no MOOSE target is declared until an exact backend executable is verified",
+                "no SOL MOOSE target is declared until backend and mapping capability are both verified",
                 AdapterProtocolDiagnosticContext {
                     target: Some(request.target.target.clone()),
                     ..Default::default()
@@ -73,7 +76,7 @@ impl FoundationAdapter {
             ),
             protocol_diagnostic(
                 DIAGNOSTIC_MISSING_CAPABILITY,
-                "capability support is not declared before exact backend verification",
+                "canonical mapping capability support is not yet declared",
                 AdapterProtocolDiagnosticContext::default(),
             ),
         ]
@@ -114,7 +117,7 @@ impl FoundationAdapter {
         if request.plan.actions.is_empty() {
             return Err(
                 ProtocolFailure::compatibility_not_established(
-                    "no verified MOOSE target is declared and the empty plan has no action reports for a rejected execution response",
+                    "no SOL MOOSE target is declared and the empty plan has no action reports for a rejected execution response",
                 )
                 .expect("static compatibility detail is valid"),
             );
@@ -141,7 +144,7 @@ impl FoundationAdapter {
             diagnostics: vec![Diagnostic::error(
                 DIAGNOSTIC_EXECUTION_REJECTED,
                 None,
-                "authoritative execution rejected because no verified MOOSE target is declared",
+                "authoritative execution rejected because canonical MOOSE mapping capability is not yet declared",
             )],
             provenance: None,
             extensions: Default::default(),
