@@ -7,7 +7,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
-fn base_model(operator: MooseOperator, materials: Vec<ConstantMaterialProperty>) -> MooseInputModel {
+fn base_model(
+    operator: MooseOperator,
+    materials: Vec<ConstantMaterialProperty>,
+) -> MooseInputModel {
     MooseInputModel {
         mesh: GeneratedLineMesh {
             nx: 4,
