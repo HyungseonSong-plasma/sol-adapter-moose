@@ -1,13 +1,9 @@
 use sol_adaptor_moose::backend::{MooseProcessRunner, WorkspaceLayout};
 use std::fs;
 use std::path::PathBuf;
-use std::time::Duration;
 
 fn temp_path(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!(
-        "sol-adaptor-moose-{name}-{}",
-        std::process::id()
-    ))
+    std::env::temp_dir().join(format!("sol-adaptor-moose-{name}-{}", std::process::id()))
 }
 
 #[test]
@@ -53,7 +49,10 @@ mod unix {
 
     #[test]
     fn child_stdout_and_stderr_are_captured_separately() {
-        let executable = script("capture.sh", "echo backend-out; echo backend-err >&2; exit 7");
+        let executable = script(
+            "capture.sh",
+            "echo backend-out; echo backend-err >&2; exit 7",
+        );
         let runner = MooseProcessRunner::new(&executable, Duration::from_secs(2));
         let output = runner.run(&[]).unwrap();
         assert_eq!(output.status_code, Some(7));
