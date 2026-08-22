@@ -79,12 +79,8 @@ impl MooseCondaIdentity {
                 .map(str::to_owned)
                 .ok_or_else(|| BackendError::InvalidMetadata(format!("missing string `{field}`")))
         };
-        let optional = |field: &'static str| {
-            value
-                .get(field)
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        };
+        let optional =
+            |field: &'static str| value.get(field).and_then(Value::as_str).map(str::to_owned);
 
         Ok(Self {
             name: required("name")?,
@@ -100,7 +96,11 @@ impl MooseCondaIdentity {
 
     pub fn validate_phase1_policy(&self) -> Result<(), BackendError> {
         require_equal("package name", &self.name, PHASE1_MOOSE_PACKAGE_NAME)?;
-        require_equal("package version", &self.version, PHASE1_MOOSE_PACKAGE_VERSION)?;
+        require_equal(
+            "package version",
+            &self.version,
+            PHASE1_MOOSE_PACKAGE_VERSION,
+        )?;
         require_equal("package build", &self.build, PHASE1_MOOSE_PACKAGE_BUILD)?;
         if let Some(subdir) = &self.subdir {
             require_equal("package subdir", subdir, PHASE1_MOOSE_PACKAGE_SUBDIR)?;
@@ -200,15 +200,18 @@ impl MooseProcessRunner {
 
         let deadline = Instant::now() + self.timeout;
         let (status, timed_out) = loop {
-            match child.try_wait().map_err(|error| BackendError::Process(error.to_string()))? {
+            match child
+                .try_wait()
+                .map_err(|error| BackendError::Process(error.to_string()))?
+            {
                 Some(status) => break (status, false),
                 None if Instant::now() >= deadline => {
-                    child
-                        .kill()
-                        .map_err(|error| BackendError::Process(format!("kill timed-out child: {error}")))?;
-                    let status = child
-                        .wait()
-                        .map_err(|error| BackendError::Process(format!("wait after timeout: {error}")))?;
+                    child.kill().map_err(|error| {
+                        BackendError::Process(format!("kill timed-out child: {error}"))
+                    })?;
+                    let status = child.wait().map_err(|error| {
+                        BackendError::Process(format!("wait after timeout: {error}"))
+                    })?;
                     break (status, true);
                 }
                 None => thread::sleep(Duration::from_millis(20)),
@@ -264,8 +267,10 @@ pub fn probe_exact_phase1_target(
 
     let version_output = require_success_text(runner.run(&["--version"])?, "--version")?;
     let application_type = require_success_text(runner.run(&["--show-type"])?, "--show-type")?;
-    let copyable_inputs =
-        require_success_text(runner.run(&["--show-copyable-inputs"])?, "--show-copyable-inputs")?;
+    let copyable_inputs = require_success_text(
+        runner.run(&["--show-copyable-inputs"])?,
+        "--show-copyable-inputs",
+    )?;
     if !copyable_inputs
         .split_whitespace()
         .any(|entry| entry == PHASE1_REQUIRED_COPYABLE_INPUT)
@@ -404,7 +409,9 @@ impl Display for BackendError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Io { context, detail } => write!(formatter, "{context}: {detail}"),
-            Self::InvalidMetadata(detail) => write!(formatter, "invalid MOOSE package metadata: {detail}"),
+            Self::InvalidMetadata(detail) => {
+                write!(formatter, "invalid MOOSE package metadata: {detail}")
+            }
             Self::IdentityMismatch {
                 label,
                 expected,
@@ -414,7 +421,11 @@ impl Display for BackendError {
                 "MOOSE {label} mismatch: expected `{expected}`, observed `{actual}`"
             ),
             Self::Spawn { executable, detail } => {
-                write!(formatter, "failed to spawn {}: {detail}", executable.display())
+                write!(
+                    formatter,
+                    "failed to spawn {}: {detail}",
+                    executable.display()
+                )
             }
             Self::Process(detail) => write!(formatter, "MOOSE process error: {detail}"),
             Self::Probe(detail) => write!(formatter, "MOOSE probe error: {detail}"),
