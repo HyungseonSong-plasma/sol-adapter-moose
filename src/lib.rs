@@ -23,12 +23,10 @@ impl FoundationAdapter {
             bootstrap: AdapterBootstrap {
                 adapter_id: "sol.adapter.moose".to_owned(),
                 adapter_version: env!("CARGO_PKG_VERSION").to_owned(),
-                supported_adapter_protocol_versions: Some(vec![
-                    ADAPTER_PROTOCOL_VERSION.to_owned(),
-                ]),
-                supported_public_contract_versions: Some(vec![
-                    PUBLIC_CONTRACT_VERSION.to_owned(),
-                ]),
+                supported_adapter_protocol_versions: Some(
+                    vec![ADAPTER_PROTOCOL_VERSION.to_owned()],
+                ),
+                supported_public_contract_versions: Some(vec![PUBLIC_CONTRACT_VERSION.to_owned()]),
                 extensions: Default::default(),
             },
             targets: Vec::new(),
