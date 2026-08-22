@@ -1,0 +1,22 @@
+[package]
+name = "sol-adaptor-moose"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace]
+resolver = "2"
+members = [
+    ".",
+    "vendor/sol-public-contract",
+    "vendor/sol-adapter-protocol",
+    "vendor/sol-adapter-transport",
+]
+
+[dependencies]
+serde_json = "=1.0.128"
+sol-public-contract = { path = "vendor/sol-public-contract" }
+sol-adapter-protocol = { path = "vendor/sol-adapter-protocol" }
+sol-adapter-transport = { path = "vendor/sol-adapter-transport" }
