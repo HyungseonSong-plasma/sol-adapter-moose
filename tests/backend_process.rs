@@ -1,4 +1,4 @@
-use sol_adaptor_moose::backend::{MooseProcessRunner, WorkspaceLayout};
+use sol_adaptor_moose::backend::WorkspaceLayout;
 use std::fs;
 use std::path::PathBuf;
 
