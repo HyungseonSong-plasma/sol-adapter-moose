@@ -179,7 +179,11 @@ impl MooseProcessRunner {
         self.run_command(args, None)
     }
 
-    pub fn run_in_dir(&self, args: &[&str], working_dir: &Path) -> Result<ProcessOutput, BackendError> {
+    pub fn run_in_dir(
+        &self,
+        args: &[&str],
+        working_dir: &Path,
+    ) -> Result<ProcessOutput, BackendError> {
         self.run_command(args, Some(working_dir))
     }
 
