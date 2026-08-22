@@ -96,14 +96,17 @@ jobs:
           fi
       - name: Exact backend probe and input validation
         run: cargo test --test moose_probe --locked -- --nocapture
-      - name: Preserve Phase 1 backend evidence
+      - name: Generated IR backend input validation
+        run: cargo test --test moose_ir_check --locked -- --nocapture
+      - name: Preserve Phase 1 and Phase 2 backend evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: phase1-moose-backend-evidence
+          name: moose-backend-evidence
           if-no-files-found: warn
           path: |
             target/phase1-moose-probe.json
             target/phase1-moose-conda-meta.json
             target/phase1-conda-list.json
             target/phase1-package-sha256.txt
+            target/phase2-generated/*.i
