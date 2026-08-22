@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod backend;
+pub mod ir;
 
 use sol_adapter_protocol::{
     protocol_diagnostic, ActionExecutionReport, ActionExecutionState, AdapterBootstrap,
