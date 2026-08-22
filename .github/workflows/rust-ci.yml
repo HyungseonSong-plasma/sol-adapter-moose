@@ -30,21 +30,15 @@ jobs:
         with:
           toolchain: 1.80.0
           components: rustfmt, clippy
-      - name: Generate dependency lock
+      - name: Verify dependency lock
         if: steps.workspace.outputs.present == 'true'
-        run: cargo generate-lockfile
+        run: cargo metadata --locked --format-version 1 --no-deps > /dev/null
       - name: Formatting
         if: steps.workspace.outputs.present == 'true'
         run: cargo fmt --all --check
       - name: Tests
         if: steps.workspace.outputs.present == 'true'
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
       - name: Clippy
         if: steps.workspace.outputs.present == 'true'
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Preserve generated lockfile
-        if: steps.workspace.outputs.present == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase0-cargo-lock
-          path: Cargo.lock
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
