@@ -33,7 +33,10 @@ mod unix {
         let output = execute_backend_input(&runner, &layout, "[Mesh]\n[]\n").unwrap();
 
         assert!(output.success());
-        assert_eq!(fs::read_to_string(layout.input_path()).unwrap(), "[Mesh]\n[]\n");
+        assert_eq!(
+            fs::read_to_string(layout.input_path()).unwrap(),
+            "[Mesh]\n[]\n"
+        );
         let stdout = fs::read_to_string(layout.stdout_path()).unwrap();
         let stderr = fs::read_to_string(layout.stderr_path()).unwrap();
         assert!(stdout.contains(&format!("cwd={}", layout.run_dir().display())));
@@ -57,8 +60,14 @@ mod unix {
 
         assert_eq!(output.status_code, Some(9));
         assert!(!output.success());
-        assert_eq!(fs::read_to_string(layout.stdout_path()).unwrap().trim(), "partial output");
-        assert_eq!(fs::read_to_string(layout.stderr_path()).unwrap().trim(), "failure diagnostics");
+        assert_eq!(
+            fs::read_to_string(layout.stdout_path()).unwrap().trim(),
+            "partial output"
+        );
+        assert_eq!(
+            fs::read_to_string(layout.stderr_path()).unwrap().trim(),
+            "failure diagnostics"
+        );
 
         fs::remove_file(executable).unwrap();
         fs::remove_dir_all(root).unwrap();
