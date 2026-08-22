@@ -176,16 +176,32 @@ impl MooseProcessRunner {
     }
 
     pub fn run(&self, args: &[&str]) -> Result<ProcessOutput, BackendError> {
-        let mut child = Command::new(&self.executable)
+        self.run_command(args, None)
+    }
+
+    pub fn run_in_dir(&self, args: &[&str], working_dir: &Path) -> Result<ProcessOutput, BackendError> {
+        self.run_command(args, Some(working_dir))
+    }
+
+    fn run_command(
+        &self,
+        args: &[&str],
+        working_dir: Option<&Path>,
+    ) -> Result<ProcessOutput, BackendError> {
+        let mut command = Command::new(&self.executable);
+        command
             .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|error| BackendError::Spawn {
-                executable: self.executable.clone(),
-                detail: error.to_string(),
-            })?;
+            .stderr(Stdio::piped());
+        if let Some(working_dir) = working_dir {
+            command.current_dir(working_dir);
+        }
+
+        let mut child = command.spawn().map_err(|error| BackendError::Spawn {
+            executable: self.executable.clone(),
+            detail: error.to_string(),
+        })?;
 
         let stdout = child
             .stdout
@@ -382,6 +398,27 @@ impl WorkspaceLayout {
             detail: error.to_string(),
         })
     }
+}
+
+pub fn execute_backend_input(
+    runner: &MooseProcessRunner,
+    layout: &WorkspaceLayout,
+    input: &str,
+) -> Result<ProcessOutput, BackendError> {
+    layout.prepare()?;
+    write_artifact(&layout.input_path(), input.as_bytes())?;
+
+    let output = runner.run_in_dir(&["-i", "input.i"], &layout.run_dir())?;
+    write_artifact(&layout.stdout_path(), &output.stdout)?;
+    write_artifact(&layout.stderr_path(), &output.stderr)?;
+    Ok(output)
+}
+
+fn write_artifact(path: &Path, bytes: &[u8]) -> Result<(), BackendError> {
+    fs::write(path, bytes).map_err(|error| BackendError::Io {
+        context: format!("write {}", path.display()),
+        detail: error.to_string(),
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
