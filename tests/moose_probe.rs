@@ -1,7 +1,6 @@
 use serde_json::json;
 use sol_adaptor_moose::backend::{
-    check_backend_input, probe_exact_phase1_target, MooseProcessRunner,
-    PHASE1_MOOSE_PACKAGE_SHA256,
+    check_backend_input, probe_exact_phase1_target, MooseProcessRunner, PHASE1_MOOSE_PACKAGE_SHA256,
 };
 use std::fs;
 use std::path::PathBuf;
