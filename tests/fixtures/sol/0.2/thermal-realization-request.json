@@ -1,0 +1,51 @@
+{
+  "adapter_protocol_version": "0.2",
+  "target": {
+    "public_contract_version": "0.2",
+    "target": "moose",
+    "required_capabilities": ["thermal.steady_conduction"]
+  },
+  "plan": {
+    "public_contract_version": "0.2",
+    "actions": [
+      {"id": "thermal.domain", "dependencies": []},
+      {"id": "thermal.material", "dependencies": ["thermal.domain"]},
+      {"id": "thermal.solve", "dependencies": ["thermal.material"]}
+    ]
+  },
+  "realization_spec": {
+    "public_contract_version": "0.2",
+    "ontology_version": "0.1",
+    "source_model": "model.thermal_reference",
+    "entities": [
+      {"id":"analysis.stationary","kind":"analysis","semantic_type":"StationaryAnalysis","parameters":[]},
+      {"id":"bc.hot_wall_temperature","kind":"condition_model","semantic_type":"DirichletTemperatureBoundaryCondition","parameters":[{"semantic_parameter":"thermal.temperature","quantity":{"value":400.0,"unit":"unit.kelvin"}}]},
+      {"id":"boundary.hot_wall","kind":"spatial_model","semantic_type":"BoundaryPoint1D","parameters":[{"semantic_parameter":"geometry.position","quantity":{"value":0.0,"unit":"unit.meter"}}]},
+      {"id":"domain.main","kind":"spatial_model","semantic_type":"LineDomain1D","parameters":[{"semantic_parameter":"geometry.length","quantity":{"value":1.0,"unit":"unit.meter"}}]},
+      {"id":"observation.maximum_temperature","kind":"observation_model","semantic_type":"MaximumTemperature","parameters":[]},
+      {"id":"property.thermal_conductivity","kind":"material_model","semantic_type":"ThermalConductivity","parameters":[{"semantic_parameter":"thermal.conductivity","quantity":{"value":45.0,"unit":"unit.watt_per_meter_kelvin"}}]},
+      {"id":"thermal.energy_conservation","kind":"mathematical_model","semantic_type":"SteadyHeatEquation","parameters":[]},
+      {"id":"thermal.fourier_law","kind":"constitutive_model","semantic_type":"FourierLaw","parameters":[]},
+      {"id":"thermal.temperature_field","kind":"mathematical_model","semantic_type":"Field","parameters":[]},
+      {"id":"thermal.transport","kind":"physics_model","semantic_type":"ThermalTransport","parameters":[]}
+    ],
+    "scopes": [
+      {"id":"scope.hot_wall","members":["boundary.hot_wall"]},
+      {"id":"scope.main_domain","members":["domain.main"]}
+    ],
+    "relations": [
+      {"kind":"analyzed_by","source":"model.thermal_reference","target":"analysis.stationary"},
+      {"kind":"applied_to","source":"bc.hot_wall_temperature","target":"scope.hot_wall"},
+      {"kind":"applied_to","source":"bc.hot_wall_temperature","target":"thermal.temperature_field"},
+      {"kind":"closed_by","source":"thermal.energy_conservation","target":"thermal.fourier_law"},
+      {"kind":"defined_on","source":"thermal.energy_conservation","target":"scope.main_domain"},
+      {"kind":"parameterized_by","source":"thermal.fourier_law","target":"property.thermal_conductivity"},
+      {"kind":"represented_by","source":"thermal.transport","target":"thermal.energy_conservation"}
+    ],
+    "action_bindings": [
+      {"action_id":"thermal.domain","subjects":[{"subject_kind":"entity","id":"boundary.hot_wall"},{"subject_kind":"entity","id":"domain.main"}],"scopes":["scope.hot_wall","scope.main_domain"]},
+      {"action_id":"thermal.material","subjects":[{"subject_kind":"entity","id":"property.thermal_conductivity"},{"subject_kind":"entity","id":"thermal.fourier_law"},{"subject_kind":"relation","source":"thermal.fourier_law","relation_kind":"parameterized_by","target":"property.thermal_conductivity"}],"scopes":["scope.main_domain"]},
+      {"action_id":"thermal.solve","subjects":[{"subject_kind":"entity","id":"analysis.stationary"},{"subject_kind":"entity","id":"bc.hot_wall_temperature"},{"subject_kind":"entity","id":"observation.maximum_temperature"},{"subject_kind":"entity","id":"thermal.energy_conservation"},{"subject_kind":"entity","id":"thermal.temperature_field"},{"subject_kind":"entity","id":"thermal.transport"},{"subject_kind":"relation","source":"bc.hot_wall_temperature","relation_kind":"applied_to","target":"scope.hot_wall"},{"subject_kind":"relation","source":"thermal.energy_conservation","relation_kind":"closed_by","target":"thermal.fourier_law"},{"subject_kind":"relation","source":"thermal.energy_conservation","relation_kind":"defined_on","target":"scope.main_domain"},{"subject_kind":"relation","source":"thermal.transport","relation_kind":"represented_by","target":"thermal.energy_conservation"}],"scopes":["scope.hot_wall","scope.main_domain"]}
+    ]
+  }
+}
