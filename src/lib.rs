@@ -14,9 +14,7 @@ use sol_adapter_protocol::{
     ValidatePlanResponse, ADAPTER_PROTOCOL_VERSION, ADAPTER_PROTOCOL_VERSION_0_2,
     DIAGNOSTIC_EXECUTION_REJECTED, DIAGNOSTIC_MISSING_CAPABILITY, DIAGNOSTIC_TARGET_MISMATCH,
 };
-use sol_public_contract::{
-    Diagnostic, PUBLIC_CONTRACT_VERSION, PUBLIC_CONTRACT_VERSION_0_2,
-};
+use sol_public_contract::{Diagnostic, PUBLIC_CONTRACT_VERSION, PUBLIC_CONTRACT_VERSION_0_2};
 
 /// Backward-compatible 0.1 adapter surface plus the explicitly proven Realization 0.2 target.
 ///
