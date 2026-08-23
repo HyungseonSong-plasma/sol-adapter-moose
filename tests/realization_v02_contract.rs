@@ -3,8 +3,7 @@ use sol_public_contract::{
     CanonicalDocument, ContractDocumentError, MappingPlanDtoV02, RealizationSpecDtoV02,
 };
 
-const THERMAL_REQUEST: &str =
-    include_str!("fixtures/sol/0.2/thermal-realization-request.json");
+const THERMAL_REQUEST: &str = include_str!("fixtures/sol/0.2/thermal-realization-request.json");
 const THERMAL_PLAN: &str = include_str!("fixtures/sol/0.2/thermal-mapping-plan.json");
 const THERMAL_SPEC: &str = include_str!("fixtures/sol/0.2/thermal-realization-spec.json");
 const THERMAL_SPEC_ALT: &str =
@@ -35,7 +34,10 @@ fn same_mapping_plan_can_carry_distinct_realization_identity() {
 
     spec.validate_against_plan(&plan).unwrap();
     alternate.validate_against_plan(&plan).unwrap();
-    assert_eq!(plan.to_canonical_json().unwrap(), plan.to_canonical_json().unwrap());
+    assert_eq!(
+        plan.to_canonical_json().unwrap(),
+        plan.to_canonical_json().unwrap()
+    );
     assert_ne!(
         spec.to_canonical_json().unwrap(),
         alternate.to_canonical_json().unwrap()
