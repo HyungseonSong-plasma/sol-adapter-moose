@@ -1,4 +1,7 @@
-use sol_adapter_protocol::{RealizationRequestError, ValidatePlanRequestV02};
+use sol_adapter_protocol::{
+    assess_compatibility, AdapterBootstrap, CompatibilityOutcome, CompatibilitySupport,
+    RealizationRequestError, ValidatePlanRequestV02,
+};
 use sol_public_contract::{
     CanonicalDocument, ContractDocumentError, MappingPlanDtoV02, RealizationSpecDtoV02,
 };
@@ -27,7 +30,42 @@ fn v01_default_parser_does_not_silently_accept_v02() {
 }
 
 #[test]
+fn realization_v02_compatibility_requires_both_version_axes() {
+    let core = CompatibilitySupport::realization_v02();
+    let both = AdapterBootstrap {
+        adapter_id: "sol.adapter.fixture".to_owned(),
+        adapter_version: "test".to_owned(),
+        supported_adapter_protocol_versions: Some(vec!["0.2".to_owned()]),
+        supported_public_contract_versions: Some(vec!["0.2".to_owned()]),
+        extensions: Default::default(),
+    };
+    assert_eq!(
+        assess_compatibility(&core, &both).unwrap().overall,
+        CompatibilityOutcome::Compatible
+    );
+
+    let protocol_only = AdapterBootstrap {
+        supported_public_contract_versions: None,
+        ..both.clone()
+    };
+    assert_ne!(
+        assess_compatibility(&core, &protocol_only).unwrap().overall,
+        CompatibilityOutcome::Compatible
+    );
+
+    let mixed = AdapterBootstrap {
+        supported_public_contract_versions: Some(vec!["0.1".to_owned()]),
+        ..both
+    };
+    assert_eq!(
+        assess_compatibility(&core, &mixed).unwrap().overall,
+        CompatibilityOutcome::Incompatible
+    );
+}
+
+#[test]
 fn same_mapping_plan_can_carry_distinct_realization_identity() {
+    let request = ValidatePlanRequestV02::from_json(THERMAL_REQUEST).unwrap();
     let plan = MappingPlanDtoV02::from_json(THERMAL_PLAN).unwrap();
     let spec = RealizationSpecDtoV02::from_json(THERMAL_SPEC).unwrap();
     let alternate = RealizationSpecDtoV02::from_json(THERMAL_SPEC_ALT).unwrap();
@@ -35,7 +73,7 @@ fn same_mapping_plan_can_carry_distinct_realization_identity() {
     spec.validate_against_plan(&plan).unwrap();
     alternate.validate_against_plan(&plan).unwrap();
     assert_eq!(
-        plan.to_canonical_json().unwrap(),
+        request.canonical_plan_identity().unwrap(),
         plan.to_canonical_json().unwrap()
     );
     assert_ne!(
