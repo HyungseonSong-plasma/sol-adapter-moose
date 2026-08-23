@@ -1,0 +1,17 @@
+{
+  "public_contract_version": "0.2",
+  "actions": [
+    {
+      "id": "thermal.domain",
+      "dependencies": []
+    },
+    {
+      "id": "thermal.material",
+      "dependencies": ["thermal.domain"]
+    },
+    {
+      "id": "thermal.solve",
+      "dependencies": ["thermal.material"]
+    }
+  ]
+}
