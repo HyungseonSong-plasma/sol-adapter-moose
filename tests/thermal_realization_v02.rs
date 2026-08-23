@@ -1,8 +1,6 @@
 use sol_adapter_protocol::ValidatePlanRequestV02;
 use sol_adaptor_moose::ir::MooseOperator;
-use sol_adaptor_moose::realization_v02::{
-    translate_steady_thermal_v02, ThermalRealizationError,
-};
+use sol_adaptor_moose::realization_v02::{translate_steady_thermal_v02, ThermalRealizationError};
 use sol_public_contract::{BackendTargetDtoV02, MappingPlanDtoV02, RealizationSpecDtoV02};
 
 const REQUEST: &str = include_str!("fixtures/sol/0.2/thermal-realization-request.json");
@@ -112,7 +110,10 @@ fn unsupported_conductivity_unit_is_rejected_without_conversion_guessing() {
         "unit.watt_per_centimeter_kelvin".into();
     let request = ValidatePlanRequestV02::from_json(&value.to_string()).unwrap();
     let error = translate_steady_thermal_v02(&request).unwrap_err();
-    assert!(matches!(error, ThermalRealizationError::UnsupportedUnit { .. }));
+    assert!(matches!(
+        error,
+        ThermalRealizationError::UnsupportedUnit { .. }
+    ));
 }
 
 #[test]
@@ -122,14 +123,16 @@ fn unsupported_boundary_position_is_rejected_instead_of_reinterpreted() {
         serde_json::json!(0.25);
     let request = ValidatePlanRequestV02::from_json(&value.to_string()).unwrap();
     let error = translate_steady_thermal_v02(&request).unwrap_err();
-    assert!(matches!(error, ThermalRealizationError::UnsupportedValue { .. }));
+    assert!(matches!(
+        error,
+        ThermalRealizationError::UnsupportedValue { .. }
+    ));
 }
 
 #[test]
 fn unsupported_thermal_semantic_type_is_rejected() {
     let mut value: serde_json::Value = serde_json::from_str(REQUEST).unwrap();
-    value["realization_spec"]["entities"][9]["semantic_type"] =
-        "TransientThermalTransport".into();
+    value["realization_spec"]["entities"][9]["semantic_type"] = "TransientThermalTransport".into();
     let request = ValidatePlanRequestV02::from_json(&value.to_string()).unwrap();
     let error = translate_steady_thermal_v02(&request).unwrap_err();
     assert!(matches!(
