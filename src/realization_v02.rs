@@ -46,17 +46,9 @@ pub fn translate_steady_thermal_v02(
 
     let spec = &request.realization_spec;
     let transport = unique_entity(spec, EntityKindDto::PhysicsModel, "ThermalTransport")?;
-    let equation = unique_entity(
-        spec,
-        EntityKindDto::MathematicalModel,
-        "SteadyHeatEquation",
-    )?;
+    let equation = unique_entity(spec, EntityKindDto::MathematicalModel, "SteadyHeatEquation")?;
     let closure = unique_entity(spec, EntityKindDto::ConstitutiveModel, "FourierLaw")?;
-    let conductivity = unique_entity(
-        spec,
-        EntityKindDto::MaterialModel,
-        "ThermalConductivity",
-    )?;
+    let conductivity = unique_entity(spec, EntityKindDto::MaterialModel, "ThermalConductivity")?;
     let field = unique_entity(spec, EntityKindDto::MathematicalModel, "Field")?;
     let boundary_condition = unique_entity(
         spec,
@@ -64,11 +56,7 @@ pub fn translate_steady_thermal_v02(
         "DirichletTemperatureBoundaryCondition",
     )?;
     let analysis = unique_entity(spec, EntityKindDto::Analysis, "StationaryAnalysis")?;
-    let _observation = unique_entity(
-        spec,
-        EntityKindDto::ObservationModel,
-        "MaximumTemperature",
-    )?;
+    let _observation = unique_entity(spec, EntityKindDto::ObservationModel, "MaximumTemperature")?;
     let domain = unique_entity(spec, EntityKindDto::SpatialModel, "LineDomain1D")?;
     let boundary = unique_entity(spec, EntityKindDto::SpatialModel, "BoundaryPoint1D")?;
 
@@ -78,12 +66,7 @@ pub fn translate_steady_thermal_v02(
         &transport.id,
         &equation.id,
     )?;
-    require_relation(
-        spec,
-        RelationKindDto::ClosedBy,
-        &equation.id,
-        &closure.id,
-    )?;
+    require_relation(spec, RelationKindDto::ClosedBy, &equation.id, &closure.id)?;
     require_relation(
         spec,
         RelationKindDto::ParameterizedBy,
@@ -145,11 +128,7 @@ pub fn translate_steady_thermal_v02(
         });
     }
 
-    let boundary_temperature = quantity(
-        boundary_condition,
-        "thermal.temperature",
-        "unit.kelvin",
-    )?;
+    let boundary_temperature = quantity(boundary_condition, "thermal.temperature", "unit.kelvin")?;
 
     let model = MooseInputModel {
         // A0.1 backend-local chart/discretization policy: the published LineDomain1D length
@@ -220,11 +199,9 @@ fn require_relation(
     source: &str,
     target: &str,
 ) -> Result<(), ThermalRealizationError> {
-    if spec
-        .relations
-        .iter()
-        .any(|relation| relation.kind == kind && relation.source == source && relation.target == target)
-    {
+    if spec.relations.iter().any(|relation| {
+        relation.kind == kind && relation.source == source && relation.target == target
+    }) {
         Ok(())
     } else {
         Err(ThermalRealizationError::MissingRelation {
