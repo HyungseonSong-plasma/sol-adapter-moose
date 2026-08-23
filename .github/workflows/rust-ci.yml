@@ -98,6 +98,8 @@ jobs:
         run: cargo test --test moose_probe --locked -- --nocapture
       - name: Generated IR backend input validation
         run: cargo test --test moose_ir_check --locked -- --nocapture
+      - name: Canonical thermal 0.2 translation validation
+        run: cargo test --test moose_realization_v02_check --locked -- --nocapture
       - name: Backend-only workspace execution
         run: cargo test --test moose_backend_workspace --locked -- --nocapture
       - name: Preserve backend evidence
@@ -112,6 +114,7 @@ jobs:
             target/phase1-conda-list.json
             target/phase1-package-sha256.txt
             target/phase2-generated/*.i
+            target/phase3-realization-v02/*.i
             target/backend-workspace-evidence/runs/backend-only-diffusion/input.i
             target/backend-workspace-evidence/runs/backend-only-diffusion/stdout.log
             target/backend-workspace-evidence/runs/backend-only-diffusion/stderr.log
