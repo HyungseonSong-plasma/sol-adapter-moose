@@ -749,7 +749,18 @@ mod tests {
         assert_eq!(failure.side_effects, SideEffectEvidence::MayHaveOccurred);
 
         let layout = WorkspaceLayout::new(&root, "post-start-failure").unwrap();
-        let trace = fs::read_to_string(layout.run_dir().join("invocation-trace.txt")).unwrap();
+        let trace_path = layout.run_dir().join("invocation-trace.txt");
+        assert!(
+            trace_path.is_file(),
+            "fake backend was not observed; failure={failure:?}; run_dir_exists={}; input_exists={}; check_stdout_exists={}; check_stderr_exists={}; stdout_exists={}; stderr_exists={}",
+            layout.run_dir().is_dir(),
+            layout.input_path().is_file(),
+            layout.run_dir().join("check.stdout.log").is_file(),
+            layout.run_dir().join("check.stderr.log").is_file(),
+            layout.stdout_path().is_file(),
+            layout.stderr_path().is_file(),
+        );
+        let trace = fs::read_to_string(trace_path).unwrap();
         let invocations = trace.lines().collect::<Vec<_>>();
         assert_eq!(
             invocations.len(),
