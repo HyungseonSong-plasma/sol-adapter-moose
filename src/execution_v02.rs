@@ -722,7 +722,7 @@ mod tests {
         let mut file = fs::File::create(&script).unwrap();
         writeln!(
             file,
-            "#!/bin/sh\ncase \" $* \" in\n  *\" --check-input \"*) echo checked; exit 0;;\nesac\necho run >> solve-count.txt\necho backend-failed >&2\nexit 9"
+            "#!/bin/sh\necho \"$*\" >> invocation-trace.txt\ncase \" $* \" in\n  *\" --check-input \"*) echo checked; exit 0;;\nesac\necho backend-failed >&2\nexit 9"
         )
         .unwrap();
         let mut permissions = fs::metadata(&script).unwrap().permissions();
@@ -749,8 +749,29 @@ mod tests {
         assert_eq!(failure.side_effects, SideEffectEvidence::MayHaveOccurred);
 
         let layout = WorkspaceLayout::new(&root, "post-start-failure").unwrap();
-        let count = layout.run_dir().join("solve-count.txt");
-        assert_eq!(fs::read_to_string(&count).unwrap().lines().count(), 1);
+        let trace = fs::read_to_string(layout.run_dir().join("invocation-trace.txt")).unwrap();
+        let invocations = trace.lines().collect::<Vec<_>>();
+        assert_eq!(
+            invocations.len(),
+            2,
+            "expected one check and one solve invocation; trace={trace:?}; failure={failure:?}"
+        );
+        assert_eq!(
+            invocations
+                .iter()
+                .filter(|line| line.contains("--check-input"))
+                .count(),
+            1,
+            "check invocation trace={trace:?}"
+        );
+        assert_eq!(
+            invocations
+                .iter()
+                .filter(|line| !line.contains("--check-input"))
+                .count(),
+            1,
+            "solve invocation trace={trace:?}"
+        );
         assert!(layout.input_path().is_file());
         assert!(layout.run_dir().join("check.stdout.log").is_file());
         assert!(layout.run_dir().join("check.stderr.log").is_file());
