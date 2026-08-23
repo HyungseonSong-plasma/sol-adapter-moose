@@ -9,8 +9,8 @@ use sol_adapter_protocol::{
     ExecutionOutcome, ExecutionProvenance, OpaqueExecutionReference, PreflightOutcome,
     ProtocolFailure, ProtocolOperation, SideEffectEvidence, ValidatePlanRequestV02,
     ValidatePlanResponseV02, ADAPTER_PROTOCOL_VERSION_0_2, DIAGNOSTIC_EXECUTION_REJECTED,
-    DIAGNOSTIC_MISSING_CAPABILITY, DIAGNOSTIC_PRECONDITION_REJECTED,
-    DIAGNOSTIC_TARGET_MISMATCH, DIAGNOSTIC_TRANSIENT_UNAVAILABLE,
+    DIAGNOSTIC_MISSING_CAPABILITY, DIAGNOSTIC_PRECONDITION_REJECTED, DIAGNOSTIC_TARGET_MISMATCH,
+    DIAGNOSTIC_TRANSIENT_UNAVAILABLE,
 };
 use sol_public_contract::{
     Diagnostic, EntityKindDto, MappingSubjectDto, RealizationEffectDto, RealizationQualityDto,
@@ -94,9 +94,7 @@ impl ExecutionEnvironment {
                 true,
                 false,
                 DIAGNOSTIC_MISSING_CAPABILITY,
-                format!(
-                    "A0.1 Protocol 0.2 execution supports exactly `{THERMAL_CAPABILITY_V02}`"
-                ),
+                format!("A0.1 Protocol 0.2 execution supports exactly `{THERMAL_CAPABILITY_V02}`"),
                 AdapterProtocolDiagnosticContext {
                     capability: Some(THERMAL_CAPABILITY_V02.to_owned()),
                     ..Default::default()
@@ -125,22 +123,26 @@ impl ExecutionEnvironment {
                         ..Default::default()
                     },
                 )
-                .map_err(|error| protocol_operation_failure(
-                    ProtocolOperation::ValidatePlan,
-                    error,
-                    SideEffectEvidence::None,
-                ))?;
+                .map_err(|error| {
+                    protocol_operation_failure(
+                        ProtocolOperation::ValidatePlan,
+                        error,
+                        SideEffectEvidence::None,
+                    )
+                })?;
                 ValidatePlanResponseV02::new(
                     true,
                     true,
                     PreflightOutcome::Unavailable,
                     vec![diagnostic],
                 )
-                .map_err(|error| protocol_operation_failure(
-                    ProtocolOperation::ValidatePlan,
-                    error,
-                    SideEffectEvidence::None,
-                ))
+                .map_err(|error| {
+                    protocol_operation_failure(
+                        ProtocolOperation::ValidatePlan,
+                        error,
+                        SideEffectEvidence::None,
+                    )
+                })
             }
             BackendReadiness::Incompatible(detail) => rejected_preflight(
                 false,
@@ -264,7 +266,9 @@ impl ExecutionEnvironment {
             )
         })?;
 
-        layout.prepare().map_err(|error| post_start_failure(error.to_string()))?;
+        layout
+            .prepare()
+            .map_err(|error| post_start_failure(error.to_string()))?;
         fs::write(layout.input_path(), input.as_bytes())
             .map_err(|error| post_start_failure(format!("write generated input: {error}")))?;
 
@@ -302,8 +306,7 @@ impl ExecutionEnvironment {
     fn backend_readiness(&self) -> BackendReadiness {
         let Some(runner) = self.runner.as_ref() else {
             return BackendReadiness::Unavailable(
-                "SOL_MOOSE_EXECUTABLE is not configured for the current adapter process"
-                    .to_owned(),
+                "SOL_MOOSE_EXECUTABLE is not configured for the current adapter process".to_owned(),
             );
         };
         let Some(prefix) = runner.inferred_conda_prefix() else {
@@ -432,7 +435,8 @@ fn unavailable_execution(
     request: &ExecutePlanRequestV02,
     detail: String,
 ) -> Result<ExecutePlanResponseV02, ProtocolFailure> {
-    let action_diagnostic = Diagnostic::error(DIAGNOSTIC_TRANSIENT_UNAVAILABLE, None, detail.clone());
+    let action_diagnostic =
+        Diagnostic::error(DIAGNOSTIC_TRANSIENT_UNAVAILABLE, None, detail.clone());
     let mut response = ExecutePlanResponseV02 {
         adapter_protocol_version: ADAPTER_PROTOCOL_VERSION_0_2.to_owned(),
         execution: ExecutionOutcome::Unavailable,
@@ -544,7 +548,9 @@ fn completed_execution_response(
         extensions: Default::default(),
     };
     response.validate_against(request).map_err(|error| {
-        post_start_failure(format!("constructed Protocol 0.2 execution response is invalid: {error}"))
+        post_start_failure(format!(
+            "constructed Protocol 0.2 execution response is invalid: {error}"
+        ))
     })?;
     Ok(response)
 }
@@ -558,7 +564,9 @@ fn representative_effect(
         .action_bindings
         .iter()
         .find(|binding| binding.action_id == action_id)
-        .ok_or_else(|| invalid_request_failure(format!("missing action binding for {action_id}")))?;
+        .ok_or_else(|| {
+            invalid_request_failure(format!("missing action binding for {action_id}"))
+        })?;
 
     let candidates = binding
         .subjects
@@ -588,7 +596,10 @@ fn representative_effect(
     }
 }
 
-fn is_supported_effect_subject(request: &ExecutePlanRequestV02, subject: &MappingSubjectDto) -> bool {
+fn is_supported_effect_subject(
+    request: &ExecutePlanRequestV02,
+    subject: &MappingSubjectDto,
+) -> bool {
     let MappingSubjectDto::Entity { id, .. } = subject else {
         return false;
     };
@@ -653,7 +664,8 @@ mod tests {
     use sol_adapter_protocol::FailureCategory;
     use std::io::Write;
 
-    const REQUEST: &str = include_str!("../tests/fixtures/sol/0.2/thermal-realization-request.json");
+    const REQUEST: &str =
+        include_str!("../tests/fixtures/sol/0.2/thermal-realization-request.json");
 
     fn execute_request() -> ExecutePlanRequestV02 {
         ExecutePlanRequestV02::from_json(REQUEST).unwrap()
@@ -661,8 +673,8 @@ mod tests {
 
     #[test]
     fn missing_backend_returns_unavailable_without_workspace_side_effect() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target/phase4-unit/missing-backend");
+        let root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/phase4-unit/missing-backend");
         let _ = fs::remove_dir_all(&root);
         let environment = ExecutionEnvironment::unavailable(&root);
         let response = environment
@@ -678,8 +690,8 @@ mod tests {
 
     #[test]
     fn unsupported_semantics_are_rejected_before_backend_access() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target/phase4-unit/rejected-semantics");
+        let root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/phase4-unit/rejected-semantics");
         let _ = fs::remove_dir_all(&root);
         let mut value: serde_json::Value = serde_json::from_str(REQUEST).unwrap();
         value["realization_spec"]["entities"][9]["semantic_type"] =
@@ -702,8 +714,8 @@ mod tests {
     fn backend_failure_after_start_is_conservative_and_not_replayed() {
         use std::os::unix::fs::PermissionsExt;
 
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target/phase4-unit/post-start-failure");
+        let root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/phase4-unit/post-start-failure");
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let script = root.join("fake-moose.sh");
