@@ -725,6 +725,7 @@ mod tests {
             "#!/bin/sh\necho \"$*\" >> invocation-trace.txt\ncase \" $* \" in\n  *\" --check-input \"*) echo checked; exit 0;;\nesac\necho backend-failed >&2\nexit 9"
         )
         .unwrap();
+        drop(file);
         let mut permissions = fs::metadata(&script).unwrap().permissions();
         permissions.set_mode(0o755);
         fs::set_permissions(&script, permissions).unwrap();
