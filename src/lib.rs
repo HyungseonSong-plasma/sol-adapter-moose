@@ -2,6 +2,7 @@
 
 pub mod backend;
 pub mod ir;
+pub mod realization_v02;
 
 use sol_adapter_protocol::{
     protocol_diagnostic, ActionExecutionReport, ActionExecutionState, AdapterBootstrap,
@@ -14,10 +15,10 @@ use sol_public_contract::{Diagnostic, PUBLIC_CONTRACT_VERSION};
 
 /// Early adapter host before canonical SOL-to-MOOSE mapping support is accepted.
 ///
-/// Phase 1 may establish exact MOOSE package/executable evidence, but backend
-/// presence alone is not sufficient to declare a solver-neutral SOL target or
-/// semantic capability. Target/capability declarations therefore stay empty
-/// until the applicable mapping contract is established and tested.
+/// Phase 3 adds an explicit Public Contract/Adapter Protocol 0.2 translation module, but the
+/// runtime description remains on the established 0.1 operational surface until Phase 4 wires
+/// authoritative Protocol 0.2 execution. Translation support alone is not advertised as runtime
+/// target/execution compatibility.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FoundationAdapter;
 

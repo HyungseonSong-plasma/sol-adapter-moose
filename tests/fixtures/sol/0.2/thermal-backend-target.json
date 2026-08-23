@@ -1,0 +1,7 @@
+{
+  "public_contract_version": "0.2",
+  "target": "moose",
+  "required_capabilities": [
+    "thermal.steady_conduction"
+  ]
+}

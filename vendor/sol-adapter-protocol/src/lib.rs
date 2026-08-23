@@ -3,9 +3,11 @@
 mod execution;
 mod failure;
 mod preflight;
+mod realization_v02;
 pub use execution::*;
 pub use failure::*;
 pub use preflight::*;
+pub use realization_v02::*;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -14,7 +16,11 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-pub const ADAPTER_PROTOCOL_VERSION: &str = "0.1";
+pub const ADAPTER_PROTOCOL_VERSION_0_1: &str = "0.1";
+pub const ADAPTER_PROTOCOL_VERSION_0_2: &str = "0.2";
+
+/// Backward-compatible default for the already-published Adapter Protocol 0.1 surface.
+pub const ADAPTER_PROTOCOL_VERSION: &str = ADAPTER_PROTOCOL_VERSION_0_1;
 
 pub type Extensions = BTreeMap<String, Value>;
 
@@ -29,8 +35,14 @@ impl AdapterProtocolVersion {
         Self { major, minor }
     }
 
+    /// Historical/default version used by the existing 0.1 DTO surface.
     pub const fn current() -> Self {
         Self::new(0, 1)
+    }
+
+    /// Explicit Adapter Protocol 0.2 realization request boundary introduced by M0.8.
+    pub const fn realization_v02() -> Self {
+        Self::new(0, 2)
     }
 
     pub const fn major(self) -> u64 {
@@ -218,11 +230,25 @@ pub struct CompatibilitySupport {
 }
 
 impl CompatibilitySupport {
+    /// Backward-compatible support profile for the already-published 0.1 pair.
     pub fn current() -> Self {
         Self {
             adapter_protocol_versions: Some(vec![ADAPTER_PROTOCOL_VERSION.to_owned()]),
             public_contract_versions: Some(vec![
                 sol_public_contract::PUBLIC_CONTRACT_VERSION.to_owned()
+            ]),
+        }
+    }
+
+    /// Exact support profile for the 0.2 realization boundary.
+    ///
+    /// Protocol and Public Contract compatibility remain independent axes; callers must
+    /// observe compatibility on both axes before sending a 0.2 realization request.
+    pub fn realization_v02() -> Self {
+        Self {
+            adapter_protocol_versions: Some(vec![ADAPTER_PROTOCOL_VERSION_0_2.to_owned()]),
+            public_contract_versions: Some(vec![
+                sol_public_contract::PUBLIC_CONTRACT_VERSION_0_2.to_owned()
             ]),
         }
     }
@@ -566,6 +592,11 @@ mod tests {
             AdapterProtocolVersion::current()
         );
         assert_eq!(AdapterProtocolVersion::current().to_string(), "0.1");
+        assert_eq!(
+            AdapterProtocolVersion::parse("0.2").unwrap(),
+            AdapterProtocolVersion::realization_v02()
+        );
+        assert_eq!(AdapterProtocolVersion::realization_v02().to_string(), "0.2");
     }
 
     #[test]
