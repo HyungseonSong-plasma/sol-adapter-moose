@@ -81,9 +81,12 @@ fn canonical_thermal_v02_executes_authoritatively_on_exact_moose_target() {
 
     let provenance = response.provenance.as_ref().expect("execution provenance");
     assert_eq!(provenance.producer, "sol.adapter.moose");
-    assert!(provenance.opaque_references.iter().any(
-        |reference| reference.namespace == "moose.workspace" && reference.reference == RUN_KEY
-    ));
+    assert!(provenance
+        .opaque_references
+        .iter()
+        .any(
+            |reference| reference.namespace == "moose.workspace" && reference.reference == RUN_KEY
+        ));
     assert!(provenance
         .opaque_references
         .iter()
