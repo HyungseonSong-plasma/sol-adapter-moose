@@ -719,12 +719,10 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let script = root.join("fake-moose.sh");
-        let count = root.join("solve-count.txt");
         let mut file = fs::File::create(&script).unwrap();
         writeln!(
             file,
-            "#!/bin/sh\ncase \" $* \" in\n  *\" --check-input \"*) echo checked; exit 0;;\nesac\necho run >> '{}'\necho backend-failed >&2\nexit 9",
-            count.display()
+            "#!/bin/sh\ncase \" $* \" in\n  *\" --check-input \"*) echo checked; exit 0;;\nesac\necho run >> solve-count.txt\necho backend-failed >&2\nexit 9"
         )
         .unwrap();
         let mut permissions = fs::metadata(&script).unwrap().permissions();
@@ -749,9 +747,10 @@ mod tests {
             .unwrap_err();
         assert_eq!(failure.category, FailureCategory::Operational);
         assert_eq!(failure.side_effects, SideEffectEvidence::MayHaveOccurred);
-        assert_eq!(fs::read_to_string(&count).unwrap().lines().count(), 1);
 
         let layout = WorkspaceLayout::new(&root, "post-start-failure").unwrap();
+        let count = layout.run_dir().join("solve-count.txt");
+        assert_eq!(fs::read_to_string(&count).unwrap().lines().count(), 1);
         assert!(layout.input_path().is_file());
         assert!(layout.run_dir().join("check.stdout.log").is_file());
         assert!(layout.run_dir().join("check.stderr.log").is_file());
