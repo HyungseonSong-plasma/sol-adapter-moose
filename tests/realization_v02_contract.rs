@@ -91,6 +91,18 @@ fn missing_realization_spec_is_rejected() {
 }
 
 #[test]
+fn broken_action_binding_is_rejected() {
+    let mut value: serde_json::Value = serde_json::from_str(THERMAL_REQUEST).unwrap();
+    value["realization_spec"]["action_bindings"][2]["action_id"] =
+        serde_json::Value::String("thermal.unknown".to_owned());
+    let error = ValidatePlanRequestV02::from_json(&value.to_string()).unwrap_err();
+    assert!(matches!(
+        error,
+        RealizationRequestError::PlanRealizationMismatch(_)
+    ));
+}
+
+#[test]
 fn mixed_public_contract_versions_are_rejected() {
     let mut value: serde_json::Value = serde_json::from_str(THERMAL_REQUEST).unwrap();
     value["target"]["public_contract_version"] = serde_json::Value::String("0.1".to_owned());
