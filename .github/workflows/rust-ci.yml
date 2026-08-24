@@ -101,7 +101,12 @@ jobs:
       - name: Canonical thermal 0.2 translation validation
         run: cargo test --test moose_realization_v02_check --locked -- --nocapture
       - name: Protocol 0.2 authoritative thermal execution
-        run: cargo test --test moose_execution_v02 --locked -- --nocapture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/phase4-execution-evidence
+          cargo test --test moose_execution_v02 --locked -- --nocapture 2>&1 \
+            | tee target/phase4-execution-evidence/protocol-test.log
       - name: Backend-only workspace execution
         run: cargo test --test moose_backend_workspace --locked -- --nocapture
       - name: Preserve backend evidence
@@ -117,6 +122,7 @@ jobs:
             target/phase1-package-sha256.txt
             target/phase2-generated/*.i
             target/phase3-realization-v02/*.i
+            target/phase4-execution-evidence/protocol-test.log
             target/phase4-execution-evidence/runs/thermal-realization-001/input.i
             target/phase4-execution-evidence/runs/thermal-realization-001/check.stdout.log
             target/phase4-execution-evidence/runs/thermal-realization-001/check.stderr.log
