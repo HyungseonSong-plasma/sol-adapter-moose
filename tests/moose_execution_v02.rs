@@ -43,9 +43,7 @@ fn canonical_thermal_v02_executes_authoritatively_on_exact_moose_target() {
 
     let mut response = environment
         .execute_plan_v02_with_run_key(&execute_request, RUN_KEY)
-        .unwrap_or_else(|error| {
-            panic!("execute_plan_v02_with_run_key failed: {error:?}")
-        });
+        .unwrap_or_else(|error| panic!("execute_plan_v02_with_run_key failed: {error:?}"));
     response.validate_against(&execute_request).unwrap();
 
     assert_eq!(response.execution, ExecutionOutcome::Completed);
