@@ -187,7 +187,10 @@ fn realization_v02_contract_cases_hold_without_backend_execution() {
 
     // realization-v02.required-realization-spec
     let mut missing_spec: Value = serde_json::from_str(REQUEST_V02).unwrap();
-    missing_spec.as_object_mut().unwrap().remove("realization_spec");
+    missing_spec
+        .as_object_mut()
+        .unwrap()
+        .remove("realization_spec");
     let missing = responses(run_adapter(
         &[
             rpc("validate_plan", missing_spec.clone(), 10),
@@ -195,8 +198,14 @@ fn realization_v02_contract_cases_hold_without_backend_execution() {
         ],
         None,
     ));
-    assert_eq!(protocol_failure_code(&missing[0]), "protocol.invalid_request");
-    assert_eq!(protocol_failure_code(&missing[1]), "protocol.invalid_request");
+    assert_eq!(
+        protocol_failure_code(&missing[0]),
+        "protocol.invalid_request"
+    );
+    assert_eq!(
+        protocol_failure_code(&missing[1]),
+        "protocol.invalid_request"
+    );
 
     // realization-v02.distinguishability
     let alternate = ValidatePlanRequestV02::new(
@@ -340,17 +349,19 @@ fn realization_v02_external_process_roundtrips_on_exact_moose_target() {
     let mut execute = ExecutePlanResponseV02::from_json(&execute_json).unwrap();
     execute.validate_against(&execute_request).unwrap();
     assert_eq!(execute.execution, ExecutionOutcome::Completed);
-    assert_eq!(execute.action_reports.len(), execute_request.plan.actions.len());
+    assert_eq!(
+        execute.action_reports.len(),
+        execute_request.plan.actions.len()
+    );
     assert!(execute.diagnostics.is_empty());
     let provenance = execute.provenance.as_ref().expect("execution provenance");
     assert_eq!(provenance.producer, "sol.adapter.moose");
-    assert!(provenance
-        .opaque_references
-        .iter()
-        .all(|reference| !execute.effects.iter().any(|effect| match &effect.subject {
+    assert!(provenance.opaque_references.iter().all(|reference| {
+        !execute.effects.iter().any(|effect| match &effect.subject {
             sol_public_contract::MappingSubjectDto::Entity { id, .. } => id == &reference.reference,
             sol_public_contract::MappingSubjectDto::Relation { .. } => false,
-        })));
+        })
+    }));
 
     let report = json!({
         "stability": "a0.1_phase5_ci_evidence_not_a_public_report_contract",
