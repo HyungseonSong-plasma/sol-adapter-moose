@@ -30,16 +30,9 @@ fn with_vv_only_instrumentation(production_input: &str) -> String {
     assert!(production_input.contains("[Outputs]\n"));
     assert!(production_input.contains("  exodus = false\n"));
 
-    let instrumented = production_input.replacen(
-        "[Outputs]\n",
-        &format!("{postprocessors}[Outputs]\n"),
-        1,
-    );
-    instrumented.replacen(
-        "  exodus = false\n",
-        "  exodus = false\n  csv = true\n",
-        1,
-    )
+    let instrumented =
+        production_input.replacen("[Outputs]\n", &format!("{postprocessors}[Outputs]\n"), 1);
+    instrumented.replacen("  exodus = false\n", "  exodus = false\n  csv = true\n", 1)
 }
 
 fn find_single_csv(run_dir: &Path) -> PathBuf {
