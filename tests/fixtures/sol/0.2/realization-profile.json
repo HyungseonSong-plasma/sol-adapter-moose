@@ -1,0 +1,53 @@
+{
+  "profile_id": "sol.realization-conformance.0.2",
+  "adapter_protocol_version": "0.2",
+  "public_contract_version": "0.2",
+  "backend_validation_scope": "not_assessed_by_conformance",
+  "cases": [
+    {
+      "id": "realization-v02.required-realization-spec",
+      "scope": "adapter_protocol.validate_plan",
+      "requirement": "validate_plan and execute_plan require an explicit Public Contract 0.2 RealizationSpec"
+    },
+    {
+      "id": "realization-v02.distinguishability",
+      "scope": "public_contract.fixture",
+      "requirement": "canonically distinct realization values remain distinguishable even when MappingPlan action IDs and dependencies are identical"
+    },
+    {
+      "id": "realization-v02.hidden-semantics-rejected",
+      "scope": "public_contract.fixture",
+      "requirement": "action IDs and opaque PlanAction extensions do not carry physics or realization meaning"
+    },
+    {
+      "id": "realization-v02.referential-integrity",
+      "scope": "public_contract.fixture",
+      "requirement": "RealizationSpec references and action bindings resolve and cover the MappingPlan exactly"
+    },
+    {
+      "id": "realization-v02.dual-axis-compatibility",
+      "scope": "adapter_protocol.compatibility",
+      "requirement": "Adapter Protocol 0.2 and Public Contract 0.2 compatibility are independently declared and both required"
+    },
+    {
+      "id": "realization-v02.mixed-version-rejected",
+      "scope": "adapter_protocol.compatibility",
+      "requirement": "mixed 0.1 and 0.2 request or response version combinations are rejected without coercion"
+    },
+    {
+      "id": "realization-v02.validate-roundtrip",
+      "scope": "adapter_protocol.validate_plan",
+      "requirement": "the published thermal validate request and accepted response satisfy Protocol 0.2 semantics"
+    },
+    {
+      "id": "realization-v02.execute-roundtrip",
+      "scope": "adapter_protocol.execute_plan",
+      "requirement": "the published thermal execute request and exact response satisfy inherited execution invariants plus RealizationSpec provenance separation"
+    },
+    {
+      "id": "realization-v02.no-physical-correctness-claim",
+      "scope": "conformance.boundary",
+      "requirement": "Protocol conformance does not establish backend physical or numerical correctness"
+    }
+  ]
+}
