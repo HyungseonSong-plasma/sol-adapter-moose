@@ -109,6 +109,22 @@ jobs:
             | tee target/phase4-execution-evidence/protocol-test.log
       - name: Backend-only workspace execution
         run: cargo test --test moose_backend_workspace --locked -- --nocapture
+      - name: Phase 5 external-process conformance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/phase5-conformance
+          cargo test --test phase5_conformance --locked -- --nocapture 2>&1 \
+            | tee target/phase5-conformance/test.log
+          test -f target/phase5-conformance/realization-v02-report.json
+      - name: Phase 5 steady thermal numerical V&V
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/phase5-vv-evidence
+          cargo test --test phase5_thermal_vv --locked -- --nocapture 2>&1 \
+            | tee target/phase5-vv-evidence/test.log
+          test -f target/phase5-vv-evidence/thermal-vv.json
       - name: Preserve backend evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -131,3 +147,16 @@ jobs:
             target/backend-workspace-evidence/runs/backend-only-diffusion/input.i
             target/backend-workspace-evidence/runs/backend-only-diffusion/stdout.log
             target/backend-workspace-evidence/runs/backend-only-diffusion/stderr.log
+            target/phase5-conformance/test.log
+            target/phase5-conformance/realization-v02-report.json
+            target/phase5-conformance/adapter-workspace/runs/*/input.i
+            target/phase5-conformance/adapter-workspace/runs/*/check.stdout.log
+            target/phase5-conformance/adapter-workspace/runs/*/check.stderr.log
+            target/phase5-conformance/adapter-workspace/runs/*/stdout.log
+            target/phase5-conformance/adapter-workspace/runs/*/stderr.log
+            target/phase5-vv-evidence/test.log
+            target/phase5-vv-evidence/thermal-vv.json
+            target/phase5-vv-evidence/runs/thermal-constant-field-vv/input.i
+            target/phase5-vv-evidence/runs/thermal-constant-field-vv/*.csv
+            target/phase5-vv-evidence/runs/thermal-constant-field-vv/stdout.log
+            target/phase5-vv-evidence/runs/thermal-constant-field-vv/stderr.log
