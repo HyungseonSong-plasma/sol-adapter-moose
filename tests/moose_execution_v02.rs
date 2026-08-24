@@ -108,6 +108,6 @@ fn canonical_thermal_v02_executes_authoritatively_on_exact_moose_target() {
 
     let input = fs::read_to_string(run_dir.join("input.i")).unwrap();
     assert!(input.contains("type = HeatConduction"));
-    assert!(input.contains("value = 45"));
+    assert!(input.contains("prop_values = '45'"));
     assert!(input.contains("value = 400"));
 }
