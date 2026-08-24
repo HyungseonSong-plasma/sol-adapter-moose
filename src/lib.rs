@@ -1,24 +1,27 @@
 #![forbid(unsafe_code)]
 
 pub mod backend;
+pub mod execution_v02;
 pub mod ir;
 pub mod realization_v02;
 
+use crate::execution_v02::{MOOSE_TARGET, THERMAL_CAPABILITY_V02};
 use sol_adapter_protocol::{
     protocol_diagnostic, ActionExecutionReport, ActionExecutionState, AdapterBootstrap,
-    AdapterDescription, AdapterProtocolDiagnosticContext, ExecutePlanRequest, ExecutePlanResponse,
-    ExecutionOutcome, PreflightOutcome, ProtocolFailure, ProtocolOperation, SideEffectEvidence,
-    ValidatePlanRequest, ValidatePlanResponse, ADAPTER_PROTOCOL_VERSION,
+    AdapterDescription, AdapterProtocolDiagnosticContext, CapabilityDeclaration,
+    ExecutePlanRequest, ExecutePlanResponse, ExecutionOutcome, PreflightOutcome, ProtocolFailure,
+    ProtocolOperation, SideEffectEvidence, TargetDeclaration, ValidatePlanRequest,
+    ValidatePlanResponse, ADAPTER_PROTOCOL_VERSION, ADAPTER_PROTOCOL_VERSION_0_2,
     DIAGNOSTIC_EXECUTION_REJECTED, DIAGNOSTIC_MISSING_CAPABILITY, DIAGNOSTIC_TARGET_MISMATCH,
 };
-use sol_public_contract::{Diagnostic, PUBLIC_CONTRACT_VERSION};
+use sol_public_contract::{Diagnostic, PUBLIC_CONTRACT_VERSION, PUBLIC_CONTRACT_VERSION_0_2};
 
-/// Early adapter host before canonical SOL-to-MOOSE mapping support is accepted.
+/// Backward-compatible 0.1 adapter surface plus the explicitly proven Realization 0.2 target.
 ///
-/// Phase 3 adds an explicit Public Contract/Adapter Protocol 0.2 translation module, but the
-/// runtime description remains on the established 0.1 operational surface until Phase 4 wires
-/// authoritative Protocol 0.2 execution. Translation support alone is not advertised as runtime
-/// target/execution compatibility.
+/// The 0.1 validate/execute methods remain intentionally non-realizing because Protocol 0.1
+/// carries no RealizationSpec. Phase 4 adds the separate authoritative Protocol 0.2 runtime in
+/// `execution_v02`; the shared description advertises both frozen 0.1 support and the explicit
+/// 0.2 realization boundary required by the SOL M0.8 handoff.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FoundationAdapter;
 
@@ -28,13 +31,25 @@ impl FoundationAdapter {
             bootstrap: AdapterBootstrap {
                 adapter_id: "sol.adapter.moose".to_owned(),
                 adapter_version: env!("CARGO_PKG_VERSION").to_owned(),
-                supported_adapter_protocol_versions: Some(
-                    vec![ADAPTER_PROTOCOL_VERSION.to_owned()],
-                ),
-                supported_public_contract_versions: Some(vec![PUBLIC_CONTRACT_VERSION.to_owned()]),
+                supported_adapter_protocol_versions: Some(vec![
+                    ADAPTER_PROTOCOL_VERSION.to_owned(),
+                    ADAPTER_PROTOCOL_VERSION_0_2.to_owned(),
+                ]),
+                supported_public_contract_versions: Some(vec![
+                    PUBLIC_CONTRACT_VERSION.to_owned(),
+                    PUBLIC_CONTRACT_VERSION_0_2.to_owned(),
+                ]),
                 extensions: Default::default(),
             },
-            targets: Vec::new(),
+            targets: vec![TargetDeclaration {
+                target: MOOSE_TARGET.to_owned(),
+                capabilities: vec![CapabilityDeclaration {
+                    capability: THERMAL_CAPABILITY_V02.to_owned(),
+                    revision: None,
+                    extensions: Default::default(),
+                }],
+                extensions: Default::default(),
+            }],
             extensions: Default::default(),
         };
 
@@ -70,7 +85,7 @@ impl FoundationAdapter {
         let diagnostics = vec![
             protocol_diagnostic(
                 DIAGNOSTIC_TARGET_MISMATCH,
-                "no SOL MOOSE target is declared until backend and mapping capability are both verified",
+                "Protocol 0.1 has no canonical realization payload; use the explicit 0.2 RealizationSpec boundary for MOOSE thermal realization",
                 AdapterProtocolDiagnosticContext {
                     target: Some(request.target.target.clone()),
                     ..Default::default()
@@ -78,7 +93,7 @@ impl FoundationAdapter {
             ),
             protocol_diagnostic(
                 DIAGNOSTIC_MISSING_CAPABILITY,
-                "canonical mapping capability support is not yet declared",
+                "canonical MOOSE thermal realization is operational only through Adapter Protocol 0.2 + Public Contract 0.2",
                 AdapterProtocolDiagnosticContext::default(),
             ),
         ]
@@ -119,7 +134,7 @@ impl FoundationAdapter {
         if request.plan.actions.is_empty() {
             return Err(
                 ProtocolFailure::compatibility_not_established(
-                    "no SOL MOOSE target is declared and the empty plan has no action reports for a rejected execution response",
+                    "Protocol 0.1 carries no RealizationSpec and the empty plan has no action reports for a rejected execution response",
                 )
                 .expect("static compatibility detail is valid"),
             );
@@ -146,7 +161,7 @@ impl FoundationAdapter {
             diagnostics: vec![Diagnostic::error(
                 DIAGNOSTIC_EXECUTION_REJECTED,
                 None,
-                "authoritative execution rejected because canonical MOOSE mapping capability is not yet declared",
+                "authoritative MOOSE realization requires Adapter Protocol 0.2 + Public Contract 0.2 RealizationSpec",
             )],
             provenance: None,
             extensions: Default::default(),
@@ -181,9 +196,9 @@ mod tests {
     use super::FoundationAdapter;
     use sol_adapter_protocol::{
         ActionExecutionState, ExecutePlanRequest, ExecutionOutcome, PreflightOutcome,
-        ValidatePlanRequest, ADAPTER_PROTOCOL_VERSION,
+        ValidatePlanRequest, ADAPTER_PROTOCOL_VERSION, ADAPTER_PROTOCOL_VERSION_0_2,
     };
-    use sol_public_contract::PUBLIC_CONTRACT_VERSION;
+    use sol_public_contract::{PUBLIC_CONTRACT_VERSION, PUBLIC_CONTRACT_VERSION_0_2};
 
     const REQUEST_BODY: &str = r#"{
         "adapter_protocol_version":"0.1",
@@ -199,21 +214,33 @@ mod tests {
     }"#;
 
     #[test]
-    fn description_declares_contract_versions_without_unverified_target() {
+    fn description_declares_frozen_v01_and_explicit_v02_target_support() {
         let description = FoundationAdapter.describe_adapter().unwrap();
         assert_eq!(
             description.bootstrap.supported_adapter_protocol_versions,
-            Some(vec![ADAPTER_PROTOCOL_VERSION.to_owned()])
+            Some(vec![
+                ADAPTER_PROTOCOL_VERSION.to_owned(),
+                ADAPTER_PROTOCOL_VERSION_0_2.to_owned()
+            ])
         );
         assert_eq!(
             description.bootstrap.supported_public_contract_versions,
-            Some(vec![PUBLIC_CONTRACT_VERSION.to_owned()])
+            Some(vec![
+                PUBLIC_CONTRACT_VERSION.to_owned(),
+                PUBLIC_CONTRACT_VERSION_0_2.to_owned()
+            ])
         );
-        assert!(description.targets.is_empty());
+        assert_eq!(description.targets.len(), 1);
+        assert_eq!(description.targets[0].target, "moose");
+        assert_eq!(description.targets[0].capabilities.len(), 1);
+        assert_eq!(
+            description.targets[0].capabilities[0].capability,
+            "thermal.steady_conduction"
+        );
     }
 
     #[test]
-    fn preflight_rejects_without_assigning_meaning_to_action_id() {
+    fn v01_preflight_remains_rejected_without_realization_spec_semantics() {
         let request = ValidatePlanRequest::from_json(REQUEST_BODY).unwrap();
         let response = FoundationAdapter.validate_plan(&request).unwrap();
         assert!(!response.target_compatible);
@@ -223,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn execute_rejects_before_side_effects() {
+    fn v01_execute_remains_rejected_before_side_effects() {
         let request = ExecutePlanRequest::from_json(REQUEST_BODY).unwrap();
         let response = FoundationAdapter.execute_plan(&request).unwrap();
         assert_eq!(response.execution, ExecutionOutcome::Rejected);
