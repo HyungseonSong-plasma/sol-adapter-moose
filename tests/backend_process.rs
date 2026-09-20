@@ -35,15 +35,30 @@ mod unix {
     use super::temp_path;
     use sol_adaptor_moose::backend::MooseProcessRunner;
     use std::fs;
+    use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
     use std::time::Duration;
 
     fn script(name: &str, body: &str) -> std::path::PathBuf {
         let path = temp_path(name);
-        fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        let staging = path.with_extension("tmp");
+
+        // Never execute a path that was just opened for writing. Linux may reject
+        // that race with ETXTBSY ("Text file busy") on hosted CI runners.
+        let _ = fs::remove_file(&staging);
+        let _ = fs::remove_file(&path);
+
+        {
+            let mut file = fs::File::create(&staging).unwrap();
+            write!(file, "#!/bin/sh\n{body}\n").unwrap();
+            file.flush().unwrap();
+            file.sync_all().unwrap();
+        }
+
+        let mut permissions = fs::metadata(&staging).unwrap().permissions();
         permissions.set_mode(0o755);
-        fs::set_permissions(&path, permissions).unwrap();
+        fs::set_permissions(&staging, permissions).unwrap();
+        fs::rename(&staging, &path).unwrap();
         path
     }
 
