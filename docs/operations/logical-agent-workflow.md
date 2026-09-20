@@ -1,7 +1,7 @@
 # SOL MOOSE Adapter Logical Agent Workflow
 
 **Status:** bootstrap operating convention  
-**Date:** 2026-08-22  
+**Date:** 2026-09-20  
 **Scope:** decision, planning, validation, implementation, and documentation workflow for `sol-adaptor-moose`
 
 ## Purpose
@@ -22,6 +22,19 @@ The primary local modes are:
 - `meeting` — structured decision flow;
 - `resume` — execute accepted work until a real gate;
 - `update` — synchronize docs with accepted state.
+
+## Central operations skill layer
+
+Before project-specific reasoning, use the reusable deterministic mechanics from `HyungseonSong-plasma/chatgpt-operation`. Resolve central `main` to one exact SHA and pin all skill reads used in the same decision cycle to that SHA.
+
+Minimum loading rules:
+
+- every new/uncertain session: central `README.md` + `state-refresh`;
+- before repository file/branch mutation: `repository-mutation`;
+- before checked-in governed work: `governed-work`;
+- before scheduled-controller decisions: both `controller-lifecycle` and `controller-throughput`.
+
+The central layer determines generic mechanics such as fresh-read scope, mutation safety, deterministic governed execution, controller completion, and controller liveness. It does not determine SOL meaning, MOOSE realization semantics, scientific acceptance, adapter-specific task readiness, or compatibility policy.
 
 ## 1. Manager
 
@@ -285,10 +298,14 @@ Tool timeout, connector failure, rate limit, or context exhaustion must not be c
 For a new/uncertain session:
 
 ```text
-moose-init
+resolve chatgpt-operation exact SHA
+ -> load central catalog + state-refresh
+ -> moose-init
  -> restore current repo evidence
  -> meeting | resume | update
 ```
+
+Before later mutation or controller work, load the corresponding central skill from the same pinned revision before acting.
 
 For decision-heavy work:
 
