@@ -18,14 +18,36 @@ This is an independent SOL ecosystem project and is not an official MOOSE Framew
 
 When the user sends `moose-init`, or when repository/session state may be stale:
 
-1. read `docs/operations/project-session-init.md`;
-2. follow its read-only bootstrap exactly;
-3. read `docs/operations/logical-agent-workflow.md`;
-4. inspect current GitHub repository evidence;
-5. report the restored repository/role/execution snapshot;
-6. stop before mutation until the user selects or confirms the next mode.
+1. resolve `HyungseonSong-plasma/chatgpt-operation` `main` to an exact commit SHA;
+2. pin central-skill reads to that exact SHA and load its root `README.md` plus `skills/state-refresh/README.md`;
+3. read `docs/operations/project-session-init.md`;
+4. follow its read-only bootstrap exactly;
+5. read `docs/operations/logical-agent-workflow.md`;
+6. inspect current GitHub repository evidence;
+7. report the restored central-skill/repository/role/execution snapshot;
+8. stop before mutation until the user selects or confirms the next mode.
 
 Do not reconstruct accepted project state from conversation memory alone.
+
+## Central operating skills
+
+Reusable deterministic operating mechanics are owned by the central repository:
+
+`HyungseonSong-plasma/chatgpt-operation`
+
+For every new or uncertain session, resolve the current central `main` SHA once and pin all skill reads for that session to the resolved exact SHA. Do not mix skill files from different central revisions inside one operating decision.
+
+Load skills by operation:
+
+- session/bootstrap fresh-read planning: `skills/state-refresh/README.md`;
+- repository file/branch mutation: `skills/repository-mutation/README.md` before the first write;
+- checked-in governed experiment/refactor manifests: `skills/governed-work/README.md`;
+- scheduled-controller lifecycle decisions: `skills/controller-lifecycle/README.md`;
+- scheduled-controller liveness/work-burst decisions: `skills/controller-throughput/README.md`.
+
+The central skills own generic deterministic mechanics. This repository still owns adapter-specific policy, SOL/MOOSE authority boundaries, scientific gates, task readiness, compatibility commitments, and acceptance criteria. A central skill must not override a higher-authority SOL contract or an accepted adapter decision.
+
+If the central skill source cannot be resolved or an operation-required skill cannot be loaded, report the uncertainty explicitly. Read-only repository inspection may continue when safe, but do not perform the affected mutation or controller action from stale remembered skill rules.
 
 ## Canonical local modes
 
