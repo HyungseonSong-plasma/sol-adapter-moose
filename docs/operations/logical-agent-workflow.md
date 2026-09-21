@@ -23,6 +23,28 @@ The primary local modes are:
 - `resume` — execute accepted work until a real gate;
 - `update` — synchronize docs with accepted state.
 
+## Central Paul operating layer
+
+`moose-init` and later operating actions use the exact central revision declared in `docs/operations/chatgpt-operation-binding.json`.
+
+```text
+moose-init
+  -> Paul essential rules
+  -> session-bootstrap + state-refresh
+  -> adapter-local authority/current state
+  -> first real gate
+  -> meeting | resume | update recommendation
+  -> stop read-only
+```
+
+Later deterministic mechanics are trigger-loaded from the same central pin:
+
+- repository writes -> `repository-mutation`;
+- governed checked-in manifests -> `governed-work`;
+- scheduled-controller work -> `controller-throughput` + `controller-lifecycle`.
+
+The central layer does not decide SOL meaning, MOOSE realization semantics, compatibility support, scientific validity, or adapter acceptance.
+
 ## 1. Manager
 
 Manager owns decision orchestration and state transitions, not technical truth by fiat.
@@ -282,11 +304,13 @@ Tool timeout, connector failure, rate limit, or context exhaustion must not be c
 
 ## 10. Normal flow
 
-For a new/uncertain session:
+For a new or uncertain session:
 
 ```text
 moose-init
- -> restore current repo evidence
+ -> exact Paul binding
+ -> essential rules + session-bootstrap/state-refresh
+ -> restore adapter-local state
  -> meeting | resume | update
 ```
 
@@ -297,8 +321,7 @@ Manager meeting
  -> Planner
  -> Researcher
  -> Validator
- -> revision as needed
- -> user/SOL escalation when required
+ -> revision/escalation as needed
  -> ACCEPTED
  -> Operator resume
 ```
@@ -311,4 +334,4 @@ accepted state
  -> consistency verification
 ```
 
-The goal is minimal user orchestration burden while preserving explicit authority, evidence, and real gates.
+Generic current-evidence, real-gate, interruption, and documentation-truth rules come from Paul; this document defines adapter-local role and semantic behavior.

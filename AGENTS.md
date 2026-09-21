@@ -16,16 +16,19 @@ This is an independent SOL ecosystem project and is not an official MOOSE Framew
 
 ## New or uncertain session
 
-When the user sends `moose-init`, or when repository/session state may be stale:
+When the user sends `moose-init`, use the exact consumer binding in `docs/operations/chatgpt-operation-binding.json`.
 
-1. read `docs/operations/project-session-init.md`;
-2. follow its read-only bootstrap exactly;
-3. read `docs/operations/logical-agent-workflow.md`;
-4. inspect current GitHub repository evidence;
-5. report the restored repository/role/execution snapshot;
-6. stop before mutation until the user selects or confirms the next mode.
+Initialization must:
 
-Do not reconstruct accepted project state from conversation memory alone.
+1. verify the pinned central revision and `OS = Paul`;
+2. read Paul `docs/operating_system/ESSENTIAL_RULES.md`;
+3. load the bound `session-bootstrap` and `state-refresh` skills;
+4. apply the adapter-local additions in `docs/operations/project-session-init.md`;
+5. restore current SOL/MOOSE repository and compatibility state;
+6. report the first real gate and recommended next mode;
+7. stop read-only.
+
+Generic pinning, memory/current-evidence, evidence-boundary, real-gate, documentation-truth, and interruption rules are owned centrally by Paul and are not duplicated here.
 
 ## Canonical local modes
 
@@ -123,66 +126,15 @@ Read `docs/knowledge/sol-adapter-baseline-0.1.md` before changing protocol-facin
 - `--check-input` or successful MOOSE execution is useful backend evidence but does not replace SOL contract validation or adapter conformance.
 - Keep MOOSE subprocess stdout/stderr and artifacts isolated from the adapter's JSON-RPC/stdin-stdout Protocol framing.
 
-## Evidence before action
+## Adapter-local evidence and gates
 
-Before implementation or state mutation, inspect current GitHub evidence. Do not infer current work from an old chat, stale README, branch name, or progress percentage.
+Apply Paul ER-05 through ER-09 for current evidence, evidence-class boundaries, real gates, interruption recovery, and documentation truth.
 
-For backend claims, distinguish:
+This repository adds the following adapter-specific requirements:
 
-- framework documentation evidence;
-- configured executable/application evidence;
-- adapter regression evidence;
-- physical/numerical V&V evidence.
-
-Do not promote one category into another.
-
-## Real gates
-
-Stop and use `meeting` or escalation when any of the following is unresolved:
-
-- SOL Public Contract or Adapter Protocol meaning;
-- compatibility/version support commitment;
-- adapter architecture with more than one material alternative;
-- backend identity/capability semantics;
-- side-effect/retry/replay behavior;
-- mapping meaning that could leak MOOSE-native identity into SOL;
-- physical/numerical validity criterion;
-- unsupported licensed/proprietary dependency or redistribution question;
-- Validator `REJECT/REVISE` finding;
-- milestone exit audit;
-- permission, branch protection, merge conflict, or non-green required CI.
-
-Accepted mechanical work may continue without repeated user confirmation until a real gate is reached.
-
-## Verification before completion
-
-A change is not complete merely because code or documentation was written. Completion requires the applicable current evidence, such as:
-
-- exact-head CI/tests;
-- Protocol/Public Contract conformance result;
-- MOOSE-specific regression result;
-- artifact/input validation;
-- physical/numerical V&V when the Phase claims it;
-- merge verification on `main`;
-- accepted issue/Phase evidence.
-
-## Documentation rule
-
-Documentation synchronizes accepted state; it does not create new semantic or compatibility truth. If writing docs exposes an unresolved choice, stop that decision path and return to `meeting`.
-
-## Durable state and resume
-
-Chat is working context, not the project database. Accepted decisions, contracts, compatibility support, validation verdicts, implementation state, and checkpoints must be committed to GitHub artifacts.
-
-After interruption:
-
-1. read the Source of Truth;
-2. locate the last committed checkpoint/current issue/PR;
-3. separate completed work from partial/uncommitted work;
-4. reconstruct the next gate from repository evidence;
-5. resume without repeating completed work.
-
-Tool timeout, rate limit, connector failure, or context interruption is an operational interruption, not a domain `REJECT` verdict.
+- keep framework documentation, configured executable/application evidence, adapter regression evidence, and physical/numerical V&V distinct;
+- unresolved SOL Public Contract / Adapter Protocol meaning, compatibility support, mapping semantics, backend capability semantics, replay/side-effect behavior, physical/numerical validity, licensing, Validator rejection/revision, milestone exit, permission/merge conflict, or required non-green CI is a local real gate;
+- completion requires the applicable current conformance, MOOSE regression, artifact/input, V&V, merge-on-main, and accepted Phase evidence.
 
 ## Public-repository hygiene
 
