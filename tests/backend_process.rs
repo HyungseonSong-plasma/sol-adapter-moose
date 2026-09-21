@@ -32,44 +32,29 @@ fn workspace_layout_is_deterministic_and_rejects_unsafe_keys() {
 
 #[cfg(unix)]
 mod unix {
-    use super::temp_path;
     use sol_adaptor_moose::backend::MooseProcessRunner;
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
     use std::time::Duration;
-
-    fn script(name: &str, body: &str) -> std::path::PathBuf {
-        let path = temp_path(name);
-        fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-        let mut permissions = fs::metadata(&path).unwrap().permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&path, permissions).unwrap();
-        path
-    }
 
     #[test]
     fn child_stdout_and_stderr_are_captured_separately() {
-        let executable = script(
-            "capture.sh",
-            "echo backend-out; echo backend-err >&2; exit 7",
-        );
-        let runner = MooseProcessRunner::new(&executable, Duration::from_secs(2));
-        let output = runner.run(&[]).unwrap();
+        let runner = MooseProcessRunner::new("/bin/sh", Duration::from_secs(2));
+        let output = runner
+            .run(&["-c", "echo backend-out; echo backend-err >&2; exit 7"])
+            .unwrap();
         assert_eq!(output.status_code, Some(7));
         assert!(!output.timed_out);
         assert_eq!(output.stdout_text().trim(), "backend-out");
         assert_eq!(output.stderr_text().trim(), "backend-err");
-        fs::remove_file(executable).unwrap();
     }
 
     #[test]
     fn timeout_terminates_child_and_preserves_captured_streams() {
-        let executable = script("timeout.sh", "echo started; echo diagnostics >&2; sleep 5");
-        let runner = MooseProcessRunner::new(&executable, Duration::from_millis(100));
-        let output = runner.run(&[]).unwrap();
+        let runner = MooseProcessRunner::new("/bin/sh", Duration::from_millis(100));
+        let output = runner
+            .run(&["-c", "echo started; echo diagnostics >&2; sleep 5"])
+            .unwrap();
         assert!(output.timed_out);
         assert_eq!(output.stdout_text().trim(), "started");
         assert_eq!(output.stderr_text().trim(), "diagnostics");
-        fs::remove_file(executable).unwrap();
     }
 }
