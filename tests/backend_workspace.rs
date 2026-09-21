@@ -10,24 +10,19 @@ fn temp_path(name: &str) -> PathBuf {
 #[cfg(unix)]
 mod unix {
     use super::*;
-    use std::os::unix::fs::PermissionsExt;
 
-    fn script(name: &str, body: &str) -> PathBuf {
-        let path = temp_path(name);
-        fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-        let mut permissions = fs::metadata(&path).unwrap().permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&path, permissions).unwrap();
-        path
+    fn fixture(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("process")
+            .join(name)
     }
 
     #[test]
     fn backend_input_executes_in_deterministic_workspace_and_persists_logs() {
         let root = temp_path("backend-workspace");
-        let executable = script(
-            "workspace.sh",
-            "printf 'cwd=%s\\n' \"$PWD\"; printf 'arg1=%s arg2=%s\\n' \"$1\" \"$2\"; printf 'backend diagnostics\\n' >&2; test -f input.i",
-        );
+        let executable = fixture("backend_workspace_success.sh");
         let runner = MooseProcessRunner::new(&executable, Duration::from_secs(2));
         let layout = WorkspaceLayout::new(&root, "backend-only-001").unwrap();
         let output = execute_backend_input(&runner, &layout, "[Mesh]\n[]\n").unwrap();
@@ -43,17 +38,13 @@ mod unix {
         assert!(stdout.contains("arg1=-i arg2=input.i"));
         assert_eq!(stderr.trim(), "backend diagnostics");
 
-        fs::remove_file(executable).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn failed_backend_execution_still_persists_captured_logs() {
         let root = temp_path("backend-workspace-failure");
-        let executable = script(
-            "workspace-failure.sh",
-            "printf 'partial output\\n'; printf 'failure diagnostics\\n' >&2; exit 9",
-        );
+        let executable = fixture("backend_workspace_failure.sh");
         let runner = MooseProcessRunner::new(&executable, Duration::from_secs(2));
         let layout = WorkspaceLayout::new(&root, "backend-only-failure").unwrap();
         let output = execute_backend_input(&runner, &layout, "[Mesh]\n[]\n").unwrap();
@@ -69,7 +60,6 @@ mod unix {
             "failure diagnostics"
         );
 
-        fs::remove_file(executable).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 }

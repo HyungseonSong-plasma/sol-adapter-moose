@@ -62,7 +62,18 @@ jobs:
             fi
           fi
           if git diff --quiet "$base" "$head" -- \
-              Cargo.toml Cargo.lock rust-toolchain.toml src tests; then
+              Cargo.toml \
+              Cargo.lock \
+              rust-toolchain.toml \
+              src \
+              tests/moose_probe.rs \
+              tests/moose_ir_check.rs \
+              tests/moose_realization_v02_check.rs \
+              tests/moose_execution_v02.rs \
+              tests/moose_backend_workspace.rs \
+              tests/phase5_conformance.rs \
+              tests/phase5_thermal_vv.rs \
+              tests/fixtures/backend; then
             echo "backend_needed=false" >> "$GITHUB_OUTPUT"
           else
             echo "backend_needed=true" >> "$GITHUB_OUTPUT"
