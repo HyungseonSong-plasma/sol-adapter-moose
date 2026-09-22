@@ -157,6 +157,18 @@ NOT ESTABLISHED  # evidence is insufficient, not equivalent to rejection
 
 Validator findings inform revision and acceptance; they do not automatically create new SOL meaning.
 
+## 4A. Standard-MOOSE-first refactor skill
+
+For accepted refactors involving custom MOOSE objects/helpers, Operator and Researcher should use:
+
+```text
+skills/standard-moose-first-refactor/README.md
+```
+
+The skill performs a capability census and prefers standard objects, standard composition, and parsed/functor composition before custom C++. It explicitly treats Unity-build compatibility, application build, `--check-input`, bounded runtime characterization, and retirement gating as separate evidence surfaces.
+
+It does not select scientific equations or upgrade backend syntax/runtime success into physical validation.
+
 ## 5. Operator
 
 Operator executes accepted work against current repository state.
