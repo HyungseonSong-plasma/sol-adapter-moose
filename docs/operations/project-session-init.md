@@ -80,6 +80,18 @@ Inspect enough current GitHub evidence to identify:
 - open PR, exact-head CI/check state, mergeability, review/permission state;
 - unresolved documentation or milestone handoff.
 
+## Adapter-local trigger skill
+
+When accepted work adds, replaces, migrates, or retires a custom MOOSE object/helper, load:
+
+```text
+skills/standard-moose-first-refactor/README.md
+```
+
+This local skill owns the MOOSE capability census and standard-object/composition preference. If the work also transfers canonical ownership, compose it with the pinned central `characterized-ownership-migration` skill when that skill is available in the active central revision.
+
+Scientific semantics and compatibility commitments remain local authority and must be resolved before the refactor skill executes.
+
 ## Next-mode selection
 
 Recommend exactly one when evidence permits:
