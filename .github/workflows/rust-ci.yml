@@ -29,12 +29,13 @@ jobs:
           data=json.loads(Path("docs/operations/chatgpt-operation-binding.json").read_text(encoding="utf-8"))
           os_meta=data["operating_system"]
           assert os_meta["repository"] == "HyungseonSong-plasma/chatgpt-operation"
-          assert os_meta["revision"] == "d18ab01346e757271e699e0e288e22f9d5f6fe29"
+          assert os_meta["revision"] == "e6df2c89578ee7b5c23f043a0aa2f7fe9cbd9499"
           assert os_meta["expected_version"] == "Paul"
           assert data["working_set"]["init"] == [
               "skills/session-bootstrap/README.md",
               "skills/state-refresh/README.md",
           ]
+          assert data["skill_catalog"] == "skills/catalog.json"
           assert data["conditional_skills"]["github_actions_observation"] == [
               "skills/github-actions-observation/README.md",
           ]
@@ -45,13 +46,14 @@ jobs:
           central_dir="$(mktemp -d)"
           git -C "$central_dir" init -q
           git -C "$central_dir" remote add origin https://github.com/HyungseonSong-plasma/chatgpt-operation.git
-          git -C "$central_dir" fetch --quiet --depth=1 origin d18ab01346e757271e699e0e288e22f9d5f6fe29
-          git -C "$central_dir" show d18ab01346e757271e699e0e288e22f9d5f6fe29:docs/operating_system/README.md | grep -Fq '**Current version name:** Paul'
-          git -C "$central_dir" cat-file -e d18ab01346e757271e699e0e288e22f9d5f6fe29:docs/operating_system/ESSENTIAL_RULES.md
-          git -C "$central_dir" cat-file -e d18ab01346e757271e699e0e288e22f9d5f6fe29:skills/session-bootstrap/README.md
-          git -C "$central_dir" cat-file -e d18ab01346e757271e699e0e288e22f9d5f6fe29:skills/state-refresh/README.md
-          git -C "$central_dir" cat-file -e d18ab01346e757271e699e0e288e22f9d5f6fe29:skills/github-actions-observation/README.md
-          git -C "$central_dir" cat-file -e d18ab01346e757271e699e0e288e22f9d5f6fe29:skills/github-actions-execution/README.md
+          git -C "$central_dir" fetch --quiet --depth=1 origin e6df2c89578ee7b5c23f043a0aa2f7fe9cbd9499
+          git -C "$central_dir" show e6df2c89578ee7b5c23f043a0aa2f7fe9cbd9499:docs/operating_system/README.md | grep -Fq '**Current version name:** Paul'
+          git -C "$central_dir" cat-file -e e6df2c89578ee7b5c23f043a0aa2f7fe9cbd9499:docs/operating_system/ESSENTIAL_RULES.md
+          git -C "$central_dir" cat-file -e e6df2c89578ee7b5c23f043a0aa2f7fe9cbd9499:skills/session-bootstrap/README.md
+          git -C "$central_dir" cat-file -e e6df2c89578ee7b5c23f043a0aa2f7fe9cbd9499:skills/state-refresh/README.md
+          git -C "$central_dir" cat-file -e e6df2c89578ee7b5c23f043a0aa2f7fe9cbd9499:skills/github-actions-observation/README.md
+          git -C "$central_dir" cat-file -e e6df2c89578ee7b5c23f043a0aa2f7fe9cbd9499:skills/github-actions-execution/README.md
+          git -C "$central_dir" cat-file -e e6df2c89578ee7b5c23f043a0aa2f7fe9cbd9499:skills/catalog.json
           rm -rf "$central_dir"
       - name: Classify backend-relevant change
         id: changes
