@@ -2,11 +2,11 @@
   "schema_version": 1,
   "operating_system": {
     "repository": "HyungseonSong-plasma/chatgpt-operation",
-    "revision": "d18ab01346e757271e699e0e288e22f9d5f6fe29",
+    "revision": "e6df2c89578ee7b5c23f043a0aa2f7fe9cbd9499",
     "index": "docs/operating_system/README.md",
     "expected_version": "Paul"
   },
-  "skill_catalog": "README.md",
+  "skill_catalog": "skills/catalog.json",
   "working_set": {
     "init": [
       "skills/session-bootstrap/README.md",
