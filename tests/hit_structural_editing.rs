@@ -1,4 +1,7 @@
-use sol_adaptor_moose::hit::{append_top_level_block, get_parameter, remove_block, remove_parameter, replace_block, upsert_parameter, HitError, MooseInput};
+use sol_adaptor_moose::hit::{
+    append_top_level_block, get_parameter, remove_block, remove_parameter, replace_block,
+    upsert_parameter, HitError, MooseInput,
+};
 
 const LF: &str = "# α comment\n[Variables]\n  [./u] # child\n    type = FVReal\n  [../]\n[]\n[Executioner]\n  type = Transient\n  dt = 1e-4 # keep\n[]\n";
 
@@ -14,7 +17,10 @@ fn malformed_and_ambiguous_input_fails_closed() {
     assert!(matches!(MooseInput::parse("[]\n"), Err(HitError::UnmatchedClose { .. })));
     assert!(matches!(MooseInput::parse("[A]\n"), Err(HitError::UnclosedBlock { .. })));
     let dup = "[A]\n[]\n[A]\n[]\n";
-    assert!(matches!(MooseInput::parse(dup).unwrap().unique("A"), Err(HitError::AmbiguousBlock { count: 2, .. })));
+    assert!(matches!(
+        MooseInput::parse(dup).unwrap().unique("A"),
+        Err(HitError::AmbiguousBlock { count: 2, .. })
+    ));
 }
 
 #[test]
@@ -22,7 +28,12 @@ fn parameter_edits_are_local_and_preserve_comments() {
     let changed = upsert_parameter(LF, "Executioner", "dt", "2e-4").unwrap();
     assert!(changed.contains("dt = 2e-4 # keep"));
     assert!(changed.starts_with("# α comment\n[Variables]"));
-    assert_eq!(get_parameter(&changed, "Executioner", "dt").unwrap().as_deref(), Some("2e-4"));
+    assert_eq!(
+        get_parameter(&changed, "Executioner", "dt")
+            .unwrap()
+            .as_deref(),
+        Some("2e-4")
+    );
     let inserted = upsert_parameter(&changed, "Executioner", "end_time", "1e-3").unwrap();
     assert!(inserted.contains("  end_time = 1e-3\n[]"));
     let removed = remove_parameter(&inserted, "Executioner", "end_time").unwrap();
@@ -32,7 +43,10 @@ fn parameter_edits_are_local_and_preserve_comments() {
 #[test]
 fn duplicate_parameter_is_rejected() {
     let dup = LF.replace("  dt = 1e-4 # keep\n", "  dt = 1e-4\n  dt = 2e-4\n");
-    assert!(matches!(upsert_parameter(&dup, "Executioner", "dt", "3e-4"), Err(HitError::AmbiguousParameter { count: 2, .. })));
+    assert!(matches!(
+        upsert_parameter(&dup, "Executioner", "dt", "3e-4"),
+        Err(HitError::AmbiguousParameter { count: 2, .. })
+    ));
 }
 
 #[test]
