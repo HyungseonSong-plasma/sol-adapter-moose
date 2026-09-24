@@ -2,6 +2,7 @@
 
 pub mod backend;
 pub mod execution_v02;
+pub mod hit;
 pub mod ir;
 pub mod realization_v02;
 
