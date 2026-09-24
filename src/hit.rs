@@ -21,10 +21,16 @@ impl fmt::Display for HitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnmatchedClose { offset } => write!(f, "unmatched closing block at byte {offset}"),
-            Self::UnclosedBlock { paths } => write!(f, "unclosed MOOSE block(s): {}", paths.join(", ")),
+            Self::UnclosedBlock { paths } => {
+                write!(f, "unclosed MOOSE block(s): {}", paths.join(", "))
+            }
             Self::BlockNotFound { path } => write!(f, "block not found: {path}"),
-            Self::AmbiguousBlock { path, count } => write!(f, "expected one block {path:?}, found {count}"),
-            Self::AmbiguousParameter { path, name, count } => write!(f, "ambiguous parameter {path}/{name}: {count} assignments"),
+            Self::AmbiguousBlock { path, count } => {
+                write!(f, "expected one block {path:?}, found {count}")
+            }
+            Self::AmbiguousParameter { path, name, count } => {
+                write!(f, "ambiguous parameter {path}/{name}: {count} assignments")
+            }
             Self::InvalidMutation { detail } => f.write_str(detail),
         }
     }
@@ -113,10 +119,10 @@ impl<'a> MooseInput<'a> {
 
 fn bracket_token(line: &str) -> Option<&str> {
     let body = line.trim_start();
-    if !body.starts_with('[') { return None; }
+    if !body.starts_with('[') {\n        return None;\n    }
     let close = body.find(']')?;
     let suffix = body[close + 1..].trim_start();
-    if !suffix.is_empty() && !suffix.starts_with('#') { return None; }
+    if !suffix.is_empty() && !suffix.starts_with('#') {\n        return None;\n    }
     Some(body[1..close].trim())
 }
 
