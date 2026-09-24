@@ -76,6 +76,7 @@ jobs:
               Cargo.lock \
               rust-toolchain.toml \
               src \
+              tests/hit_structural_editing.rs \
               tests/moose_probe.rs \
               tests/moose_ir_check.rs \
               tests/moose_realization_v02_check.rs \
