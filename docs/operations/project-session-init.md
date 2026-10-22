@@ -1,27 +1,35 @@
 # SOL MOOSE Adapter Project Session Initialization
 
-**Status:** consumer-local Paul bootstrap configuration  
+**Status:** consumer-local Samuel bootstrap configuration  
 **Command:** `moose-init`  
-**Scope:** adapter-specific additions to the central Paul `session-bootstrap` skill
+**Scope:** adapter-specific additions to the central Samuel `session-bootstrap` skill
 
 ## Central authority
 
-Use the exact binding in:
+Use the canonical exact-revision manifest and compatibility binding:
 
 ```text
+docs/operating_system/central_skills.json
 docs/operations/chatgpt-operation-binding.json
 ```
+
+Follow root `BOOTSTRAP.md`; the compatibility binding must agree with the
+canonical manifest. The exact central blob SHAs in the manifest are required.
 
 A valid initialization requires:
 
 ```text
-OS = Paul
-Paul essential rules loaded
+OS = Samuel
+Samuel essential rules loaded
 session-bootstrap loaded
 state-refresh loaded
+skills/catalog.json verified
+skills/capability-registry.json verified
+GITHUB_CAPABILITY_ROUTING = READY
+GITHUB_MUTATION_PREFLIGHT = TRIGGER_REQUIRED
 ```
 
-The generic bootstrap algorithm, exact-pin rule, fail-closed behavior, read-only boundary, current-evidence rules, and interruption recovery are owned by the pinned Paul OS and central skills.
+The generic bootstrap, immutable artifact verification, capability/provider routing, fail-closed read-only boundary, current-evidence rules, and interruption recovery are owned by pinned Samuel skills/controller mechanics.
 
 Do not reimplement those algorithms locally.
 
@@ -29,7 +37,7 @@ Do not reimplement those algorithms locally.
 
 After the central bootstrap layer is established, restore only the minimum local material needed for the current gate:
 
-1. root `AGENTS.md`;
+1. root `BOOTSTRAP.md` and `AGENTS.md`;
 2. this file;
 3. `docs/operations/logical-agent-workflow.md`;
 4. current GitHub repository evidence;
@@ -106,13 +114,14 @@ The recommendation does not execute the mode.
 
 Report:
 
-1. Paul central revision and loaded init skills;
+1. Samuel central revision, verified blob identities, and loaded init skills;
 2. repository/ref;
 3. current execution state;
 4. compatibility state;
 5. first real gate;
 6. recommended next mode;
-7. unresolved evidence uncertainty.
+7. unresolved evidence uncertainty;
+8. `GITHUB_CAPABILITY_ROUTING` and `GITHUB_MUTATION_PREFLIGHT`.
 
 No operating-metrics context is required.
 
@@ -122,10 +131,10 @@ A minimal stable hook is sufficient:
 
 ```text
 For the SOL MOOSE Adapter project, when the user sends "moose-init", use GitHub to
-open HyungseonSong-plasma/sol-adapter-moose, read the exact Paul binding in
-docs/operations/chatgpt-operation-binding.json, follow the pinned central
-session-bootstrap skill, then apply docs/operations/project-session-init.md for
-adapter-specific additions. Stop read-only after the initialization report.
+open HyungseonSong-plasma/sol-adapter-moose, follow BOOTSTRAP.md, verify the
+exact Samuel manifest in docs/operating_system/central_skills.json (and its
+compatibility binding), load session-bootstrap and state-refresh, verify the
+central catalog and capability registry, then apply the adapter-local rules. Stop read-only after the initialization report.
 ```
 
 Generic operating rules belong in `chatgpt-operation`; adapter semantics and scientific/compatibility policy remain here.
