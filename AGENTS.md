@@ -6,7 +6,7 @@ This file is intentionally self-contained enough for a future public repository.
 
 ## Repository identity
 
-- Repository: `HyungseonSong-plasma/sol-adaptor-moose`
+- Repository: `HyungseonSong-plasma/sol-adapter-moose`
 - Team context: SOL MOOSE Adapter Team
 - Product role: backend adapter that realizes SOL intent through a configured MOOSE-based application
 - Upstream semantic authority: SOL Public Contract and Adapter Protocol versions explicitly declared as supported by this adapter
@@ -20,15 +20,16 @@ When the user sends `moose-init`, use the exact consumer binding in `docs/operat
 
 Initialization must:
 
-1. verify the pinned central revision and `OS = Paul`;
-2. read Paul `docs/operating_system/ESSENTIAL_RULES.md`;
-3. load the bound `session-bootstrap` and `state-refresh` skills;
-4. apply the adapter-local additions in `docs/operations/project-session-init.md`;
-5. restore current SOL/MOOSE repository and compatibility state;
-6. report the first real gate and recommended next mode;
-7. stop read-only.
+1. read `docs/operating_system/README.md` and the canonical `central_skills.json`, cross-checking the compatibility binding;
+2. verify the exact central revision, `OS = Samuel`, and all required immutable blob SHAs;
+3. read Samuel `docs/operating_system/ESSENTIAL_RULES.md` and load the pinned `session-bootstrap` and `state-refresh` skills;
+4. verify and index the pinned `skills/catalog.json` and `skills/capability-registry.json`, reporting `GITHUB_CAPABILITY_ROUTING=READY|BLOCKED`;
+5. apply `BOOTSTRAP.md` and `docs/operations/project-session-init.md`;
+6. restore current SOL/MOOSE repository state and compatibility evidence;
+7. report `GITHUB_MUTATION_PREFLIGHT=TRIGGER_REQUIRED`, the first real gate, and recommended next mode;
+8. stop read-only.
 
-Generic pinning, memory/current-evidence, evidence-boundary, real-gate, documentation-truth, and interruption rules are owned centrally by Paul and are not duplicated here.
+Generic pinning, memory/current-evidence, evidence-boundary, real-gate, documentation-truth, and interruption rules are owned centrally by Samuel and are not duplicated here.
 
 ## Canonical local modes
 
@@ -128,7 +129,7 @@ Read `docs/knowledge/sol-adapter-baseline-0.1.md` before changing protocol-facin
 
 ## Adapter-local evidence and gates
 
-Apply Paul ER-05 through ER-09 for current evidence, evidence-class boundaries, real gates, interruption recovery, and documentation truth.
+Apply Samuel ER-05 through ER-10 for current evidence, evidence-class boundaries, real gates, interruption recovery, and documentation truth.
 
 This repository adds the following adapter-specific requirements:
 

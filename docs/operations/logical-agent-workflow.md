@@ -23,14 +23,15 @@ The primary local modes are:
 - `resume` — execute accepted work until a real gate;
 - `update` — synchronize docs with accepted state.
 
-## Central Paul operating layer
+## Central Samuel operating layer
 
 `moose-init` and later operating actions use the exact central revision declared in `docs/operations/chatgpt-operation-binding.json`.
 
 ```text
 moose-init
-  -> Paul essential rules
+  -> Samuel essential rules
   -> session-bootstrap + state-refresh
+  -> verified central catalog + capability registry
   -> adapter-local authority/current state
   -> first real gate
   -> meeting | resume | update recommendation
@@ -39,11 +40,21 @@ moose-init
 
 Later deterministic mechanics are trigger-loaded from the same central pin:
 
-- repository writes -> `repository-mutation`;
+- repository writes -> `repository-mutation` + registry-ordered providers + postcondition verification;
 - governed checked-in manifests -> `governed-work`;
-- scheduled-controller work -> `controller-throughput` + `controller-lifecycle`.
+- scheduled-controller work -> `controller-throughput` + `controller-lifecycle`;
+- PR integration -> `pull-request-merge` and the `GITHUB_PR_MERGE` provider registry.
 
 The central layer does not decide SOL meaning, MOOSE realization semantics, compatibility support, scientific validity, or adapter acceptance.
+
+## Samuel GitHub capability-routing boundary
+
+Before a GitHub state-changing action, resolve the owning Samuel trigger/skill
+and capability from the exact pinned catalog and registry. Verify current
+target identity, permissions, ordered provider prerequisites, and postcondition.
+A missing connector method is not a global unavailable-capability verdict;
+apply the registry exhaustion policy and guard. Initialization never performs
+these mutations.
 
 ## 1. Manager
 
@@ -320,7 +331,7 @@ For a new or uncertain session:
 
 ```text
 moose-init
- -> exact Paul binding
+ -> exact Samuel binding
  -> essential rules + session-bootstrap/state-refresh
  -> restore adapter-local state
  -> meeting | resume | update
@@ -346,4 +357,4 @@ accepted state
  -> consistency verification
 ```
 
-Generic current-evidence, real-gate, interruption, and documentation-truth rules come from Paul; this document defines adapter-local role and semantic behavior.
+Generic current-evidence, real-gate, interruption, and documentation-truth rules come from Samuel; this document defines adapter-local role and semantic behavior.
