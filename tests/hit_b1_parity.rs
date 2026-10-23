@@ -140,7 +140,7 @@ fn pinned_legacy_deltas_are_explicitly_not_parity_passes() {
     // UTF-8 bytes. These cannot be substituted in Physics slice operations.
     let unicode_span = json!({
         "op": "span",
-        "text": "# α\\n[A]\\n[]\\n",
+        "text": "# α\n[A]\n[]\n",
         "path": "A"
     });
     assert_eq!(native(&unicode_span), json!({"status": "ok", "value": [5, 12]}));
