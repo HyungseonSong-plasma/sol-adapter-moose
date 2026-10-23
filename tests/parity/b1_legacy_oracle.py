@@ -52,6 +52,9 @@ def main() -> None:
             result = [b.path for b in inputs.MooseInput(text).blocks]
         elif op == "unique":
             result = inputs.MooseInput(text).unique(path).path
+        elif op == "span":
+            span = inputs.MooseInput(text).unique(path)
+            result = [span.start, span.end]
         elif op == "children":
             result = params.direct_children(text, path)
         elif op == "get":
