@@ -139,10 +139,10 @@ jobs:
           old_lib = at(base, "src/lib.rs")
           new_lib = at(head, "src/lib.rs")
           if "src/lib.rs" in changed:
-              marker = b"pub mod execution_v02;\\n"
+              marker = b"pub mod execution_v02;\n"
               if old_lib.count(marker) != 1:
                   sys.exit(1)
-              if new_lib != old_lib.replace(marker, marker + b"pub mod hit;\\n", 1):
+              if new_lib != old_lib.replace(marker, marker + b"pub mod hit;\n", 1):
                   sys.exit(1)
           elif new_lib != old_lib:
               sys.exit(1)
