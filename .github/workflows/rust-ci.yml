@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       backend_needed: ${{ steps.changes.outputs.backend_needed }}
+      parity_needed: ${{ steps.changes.outputs.parity_needed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -108,8 +109,19 @@ jobs:
             head="${{ github.sha }}"
             if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
               echo "backend_needed=true" >> "$GITHUB_OUTPUT"
+              echo "parity_needed=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
+          fi
+          # Differential parity requires the pinned Python oracle, not MOOSE.
+          if git diff --quiet "$base" "$head" -- \
+              src/hit.rs \
+              tests/hit_structural_editing.rs \
+              tests/hit_b1_parity.rs \
+              tests/parity/b1_legacy_oracle.py; then
+            echo "parity_needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "parity_needed=true" >> "$GITHUB_OUTPUT"
           fi
           # HIT text editing is independent of the executable backend. Apply this
           # decision to both pull_request and push (including merge commits), or
@@ -128,8 +140,15 @@ jobs:
               "src/hit.rs",
               "src/lib.rs",
               "tests/hit_structural_editing.rs",
+              "tests/hit_b1_parity.rs",
+              "tests/parity/b1_legacy_oracle.py",
           }
-          hit_changes = {"src/hit.rs", "tests/hit_structural_editing.rs"}
+          hit_changes = {
+              "src/hit.rs",
+              "tests/hit_structural_editing.rs",
+              "tests/hit_b1_parity.rs",
+              "tests/parity/b1_legacy_oracle.py",
+          }
           if not changed or not changed <= isolated or not changed & hit_changes:
               sys.exit(1)
 
@@ -215,6 +234,36 @@ jobs:
       - name: Clippy
         if: steps.workspace.outputs.present == 'true'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  hit-parity:
+    needs: [scope]
+    if: needs.scope.outputs.parity_needed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout exact legacy Physics source
+        uses: actions/checkout@v4
+        with:
+          repository: HyungseonSong-plasma/moose-test-repo
+          ref: ea3e63ba4e4edd75e8227748e185ddd5fbb106d8
+          path: .parity/physics
+          sparse-checkout: |
+            physics_harness/adapters/moose
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Verify immutable Python oracle source
+        run: |
+          test "$(git -C .parity/physics rev-parse HEAD)" =             ea3e63ba4e4edd75e8227748e185ddd5fbb106d8
+          test -f .parity/physics/physics_harness/adapters/moose/input.py
+          test -f .parity/physics/physics_harness/adapters/moose/blocks.py
+          test -f .parity/physics/physics_harness/adapters/moose/parameters.py
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.80.0
+      - name: Execute pinned Python / Rust differential
+        env:
+          PHYSICS_B1_SOURCE_ROOT: .parity/physics
+        run: cargo test --test hit_b1_parity --locked -- --nocapture
 
   moose-backend:
     needs: [scope, rust]
