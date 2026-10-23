@@ -62,6 +62,8 @@ fn native(case: &Value) -> Value {
         "unique" => {
             MooseInput::parse(text).and_then(|doc| doc.unique(path).map(|span| json!(span.path)))
         }
+        "span" => MooseInput::parse(text)
+            .and_then(|doc| doc.unique(path).map(|span| json!([span.start, span.end]))),
         "children" => MooseInput::parse(text).map(|doc| json!(doc.direct_children(path))),
         "get" => get_parameter(text, path, name).map(|value| json!(value)),
         "upsert" => upsert_parameter(text, path, name, value).map(|value| json!(value)),
@@ -133,6 +135,16 @@ fn pinned_legacy_deltas_are_explicitly_not_parity_passes() {
         legacy(&nested, &root),
         json!({"status": "ok", "value": "child"})
     );
+
+    // Python str offsets count Unicode scalar values; Rust HIT offsets count
+    // UTF-8 bytes. These cannot be substituted in Physics slice operations.
+    let unicode_span = json!({
+        "op": "span",
+        "text": "# α\\n[A]\\n[]\\n",
+        "path": "A"
+    });
+    assert_eq!(native(&unicode_span), json!({"status": "ok", "value": [5, 12]}));
+    assert_eq!(legacy(&unicode_span, &root), json!({"status": "ok", "value": [4, 11]}));
 
     let commented_close = json!({
         "op": "upsert",
