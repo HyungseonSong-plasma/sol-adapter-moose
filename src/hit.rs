@@ -147,7 +147,7 @@ impl<'a> MooseInput<'a> {
         let trimmed = block.trim_end_matches(['\r', '\n']);
         let close_start = trimmed.rfind('\n').map_or(0, |i| i + 1);
         let close = trimmed[close_start..].trim();
-        if close != "[]" && close != "[../]" {
+        if !matches!(bracket_token(close), Some("") | Some("../")) {
             return Err(HitError::InvalidMutation {
                 detail: format!("could not identify closing line for block {path:?}: {close:?}"),
             });
@@ -188,6 +188,18 @@ pub fn append_top_level_block(text: &str, block_text: &str) -> Result<String, Hi
             detail: "top-level block payload must not be empty".into(),
         });
     }
+    let payload_doc = MooseInput::parse(payload)?;
+    if payload_doc
+        .blocks()
+        .iter()
+        .filter(|block| !block.path.contains('/'))
+        .count()
+        != 1
+    {
+        return Err(HitError::InvalidMutation {
+            detail: "expected exactly one complete top-level block".into(),
+        });
+    }
     let mut out = text.to_owned();
     if !out.is_empty() && !out.ends_with('\n') {
         out.push('\n');
@@ -214,6 +226,18 @@ pub fn replace_block(text: &str, path: &str, replacement: &str) -> Result<String
     let span = doc.unique(path)?;
     let mut payload = replacement.trim_end().to_owned();
     payload.push('\n');
+    let replacement_doc = MooseInput::parse(&payload)?;
+    if replacement_doc
+        .blocks()
+        .iter()
+        .filter(|block| !block.path.contains('/'))
+        .count()
+        != 1
+    {
+        return Err(HitError::InvalidMutation {
+            detail: "replacement must contain exactly one complete block".into(),
+        });
+    }
     let out = format!("{}{}{}", &text[..span.start], payload, &text[span.end..]);
     MooseInput::parse(&out)?;
     Ok(out)
