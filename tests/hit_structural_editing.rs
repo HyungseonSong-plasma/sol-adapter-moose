@@ -88,3 +88,24 @@ fn nested_parent_and_child_cannot_be_removed_as_one_overlapping_batch_by_acciden
     assert!(child_only.contains("[A]\n[]\n"));
     assert!(child_only.contains("[C]\n[]\n"));
 }
+
+#[test]
+fn parent_parameters_do_not_leak_into_nested_child() {
+    let input = "[A]\n  value = parent\n  [./B]\n    value = child\n  [../]\n[]\n";
+    assert_eq!(
+        get_parameter(input, "A", "value").unwrap().as_deref(),
+        Some("parent")
+    );
+    let updated = upsert_parameter(input, "A", "value", "updated").unwrap();
+    assert!(updated.contains("  value = updated\n"));
+    assert!(updated.contains("    value = child\n"));
+    let removed = remove_parameter(input, "A", "value").unwrap();
+    assert!(!removed.contains("  value = parent\n"));
+    assert!(removed.contains("    value = child\n"));
+
+    let child_only = "[A]\n  [./B]\n    value = child\n  [../]\n[]\n";
+    assert_eq!(get_parameter(child_only, "A", "value").unwrap(), None);
+    let inserted = upsert_parameter(child_only, "A", "value", "parent").unwrap();
+    assert!(inserted.contains("    value = child\n"));
+    assert!(inserted.contains("  value = parent\n"));
+}
