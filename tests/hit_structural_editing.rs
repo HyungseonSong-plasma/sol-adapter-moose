@@ -14,8 +14,14 @@ fn parses_nested_close_forms_and_direct_children() {
 
 #[test]
 fn malformed_and_ambiguous_input_fails_closed() {
-    assert!(matches!(MooseInput::parse("[]\n"), Err(HitError::UnmatchedClose { .. })));
-    assert!(matches!(MooseInput::parse("[A]\n"), Err(HitError::UnclosedBlock { .. })));
+    assert!(matches!(
+        MooseInput::parse("[]\n"),
+        Err(HitError::UnmatchedClose { .. })
+    ));
+    assert!(matches!(
+        MooseInput::parse("[A]\n"),
+        Err(HitError::UnclosedBlock { .. })
+    ));
     let dup = "[A]\n[]\n[A]\n[]\n";
     assert!(matches!(
         MooseInput::parse(dup).unwrap().unique("A"),
