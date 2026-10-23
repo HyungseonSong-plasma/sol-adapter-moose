@@ -227,8 +227,22 @@ fn parameter_matches(
     let block = &text[span.start..span.end];
     let mut result = Vec::new();
     let mut local = 0usize;
+    let mut depth = 0usize;
     for segment in block.split_inclusive('\n') {
         let line = segment.trim_end_matches(['\r', '\n']);
+        if let Some(token) = bracket_token(line) {
+            if token.is_empty() || token == "../" {
+                depth = depth.saturating_sub(1);
+            } else {
+                depth += 1;
+            }
+            local += segment.len();
+            continue;
+        }
+        if depth != 1 {
+            local += segment.len();
+            continue;
+        }
         let code = line.split_once('#').map_or(line, |(before, _)| before);
         if let Some(eq) = code.find('=') {
             if code[..eq].trim() == name {
@@ -297,8 +311,22 @@ pub fn remove_parameter(text: &str, path: &str, name: &str) -> Result<String, Hi
     let block = &text[span.start..span.end];
     let mut hits = Vec::new();
     let mut local = 0usize;
+    let mut depth = 0usize;
     for segment in block.split_inclusive('\n') {
         let line = segment.trim_end_matches(['\r', '\n']);
+        if let Some(token) = bracket_token(line) {
+            if token.is_empty() || token == "../" {
+                depth = depth.saturating_sub(1);
+            } else {
+                depth += 1;
+            }
+            local += segment.len();
+            continue;
+        }
+        if depth != 1 {
+            local += segment.len();
+            continue;
+        }
         let code = line.split_once('#').map_or(line, |(before, _)| before);
         if code.find('=').is_some_and(|eq| code[..eq].trim() == name) {
             hits.push((local, local + segment.len()));
