@@ -21,7 +21,7 @@ def error_kind(message: str) -> str:
     if "ambiguous parameter" in message or "found 2" in message and "parameter" in message:
         return "AmbiguousParameter"
     if "expected one block" in message or "unique block" in message:
-        if re.search(r"found 0\\b", message):
+        if re.search(r"found 0\b", message):
             return "BlockNotFound"
         return "AmbiguousBlock"
     return "InvalidMutation"
