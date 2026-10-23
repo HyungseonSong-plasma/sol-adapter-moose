@@ -163,7 +163,7 @@ impl<'a> MooseInput<'a> {
             payload,
             &self.text[insert_at..]
         );
-        Self::parse(&out)?;
+        MooseInput::parse(&out)?;
         Ok(out)
     }
 }
