@@ -109,3 +109,46 @@ fn parent_parameters_do_not_leak_into_nested_child() {
     assert!(inserted.contains("    value = child\n"));
     assert!(inserted.contains("  value = parent\n"));
 }
+
+#[test]
+fn commented_close_line_is_accepted_for_local_parameter_insertion() {
+    let text = "# α retained\n[A]\n  [./B] # child\n  [../] # child end\n[] # parent end\n";
+    let inserted = upsert_parameter(text, "A", "value", "42").unwrap();
+    assert_eq!(
+        inserted,
+        "# α retained\n[A]\n  [./B] # child\n  [../] # child end\n  value = 42\n[] # parent end\n"
+    );
+}
+
+#[test]
+fn append_and_replace_reject_payload_without_a_complete_block() {
+    assert!(matches!(
+        append_top_level_block("[A]\n[]\n", "not a block"),
+        Err(HitError::InvalidMutation { .. })
+    ));
+    assert!(matches!(
+        replace_block("[A]\n[]\n", "A", "not a block"),
+        Err(HitError::InvalidMutation { .. })
+    ));
+    assert!(matches!(
+        append_top_level_block("[A]\n[]\n", "[B]\n[]\n[C]\n[]"),
+        Err(HitError::InvalidMutation { .. })
+    ));
+    assert!(matches!(
+        replace_block("[A]\n[]\n", "A", "[B]\n[]\n[C]\n[]"),
+        Err(HitError::InvalidMutation { .. })
+    ));
+    assert!(matches!(
+        replace_block("[A]\n[]\n", "A", "[B]\n"),
+        Err(HitError::UnclosedBlock { .. })
+    ));
+}
+
+#[test]
+fn ambiguous_child_assignments_do_not_change_parent_parameter_ownership() {
+    let text = "[A]\n  [./B]\n    p = child\n  [../]\n[]\n";
+    assert_eq!(get_parameter(text, "A", "p").unwrap(), None);
+    let inserted = upsert_parameter(text, "A", "p", "parent").unwrap();
+    assert!(inserted.contains("    p = child\n"));
+    assert!(inserted.contains("  p = parent\n[]"));
+}
