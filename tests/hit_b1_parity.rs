@@ -59,8 +59,9 @@ fn native(case: &Value) -> Value {
                 .map(|span| span.path.as_str())
                 .collect::<Vec<_>>())
         }),
-        "unique" => MooseInput::parse(text)
-            .and_then(|doc| doc.unique(path).map(|span| json!(span.path))),
+        "unique" => {
+            MooseInput::parse(text).and_then(|doc| doc.unique(path).map(|span| json!(span.path)))
+        }
         "children" => MooseInput::parse(text).map(|doc| json!(doc.direct_children(path))),
         "get" => get_parameter(text, path, name).map(|value| json!(value)),
         "upsert" => upsert_parameter(text, path, name, value).map(|value| json!(value)),
@@ -68,8 +69,10 @@ fn native(case: &Value) -> Value {
         "remove_block" => remove_block(text, path).map(|value| json!(value)),
         "replace_block" => replace_block(text, path, payload).map(|value| json!(value)),
         "append" => append_top_level_block(text, payload).map(|value| json!(value)),
-        "insert_child" => MooseInput::parse(text)
-            .and_then(|doc| doc.insert_before_close(path, payload).map(|value| json!(value))),
+        "insert_child" => MooseInput::parse(text).and_then(|doc| {
+            doc.insert_before_close(path, payload)
+                .map(|value| json!(value))
+        }),
         other => panic!("unexpected parity operation: {other}"),
     };
     match outcome {
