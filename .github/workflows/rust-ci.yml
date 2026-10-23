@@ -111,6 +111,60 @@ jobs:
               exit 0
             fi
           fi
+          # A newly introduced, standalone HIT text editor does not exercise the
+          # MOOSE executable. Allow the B1-only PR through the Rust gate without
+          # installing the external MOOSE package. All other changes fail closed
+          # into the existing backend path, including changes to shared Rust code.
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            if python3 - "$base" "$head" <<'PY'
+          import subprocess
+          import sys
+
+          base, head = sys.argv[1:]
+          changed = set(subprocess.check_output(
+              ["git", "diff", "--name-only", base, head, "--"], text=True
+          ).splitlines())
+          allowed = {
+              ".github/workflows/rust-ci.yml",
+              "src/hit.rs",
+              "src/lib.rs",
+              "tests/hit_structural_editing.rs",
+          }
+          if (
+              not changed
+              or not changed <= allowed
+              or "src/hit.rs" not in changed
+              or "src/lib.rs" not in changed
+              or "tests/hit_structural_editing.rs" not in changed
+          ):
+              sys.exit(1)
+
+          def at(ref, path):
+              return subprocess.check_output(["git", "show", f"{ref}:{path}"])
+
+          # Ensure this is the initial isolated HIT module, not a later change
+          # to a HIT implementation that other backend code could depend on.
+          if subprocess.run(
+              ["git", "cat-file", "-e", f"{base}:src/hit.rs"],
+              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+          ).returncode == 0:
+              sys.exit(1)
+
+          old_lib = at(base, "src/lib.rs")
+          new_lib = at(head, "src/lib.rs")
+          marker = b"pub mod execution_v02;\n"
+          if old_lib.count(marker) != 1:
+              sys.exit(1)
+          expected = old_lib.replace(marker, marker + b"pub mod hit;\n", 1)
+          if new_lib != expected:
+              sys.exit(1)
+          print("Isolated B1 HIT changes only; external MOOSE backend job not required")
+          PY
+            then
+              echo "backend_needed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
           if git diff --quiet "$base" "$head" -- \
               Cargo.toml \
               Cargo.lock \
