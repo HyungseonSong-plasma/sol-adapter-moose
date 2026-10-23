@@ -143,8 +143,14 @@ fn pinned_legacy_deltas_are_explicitly_not_parity_passes() {
         "text": "# α\n[A]\n[]\n",
         "path": "A"
     });
-    assert_eq!(native(&unicode_span), json!({"status": "ok", "value": [5, 12]}));
-    assert_eq!(legacy(&unicode_span, &root), json!({"status": "ok", "value": [4, 11]}));
+    assert_eq!(
+        native(&unicode_span),
+        json!({"status": "ok", "value": [5, 12]})
+    );
+    assert_eq!(
+        legacy(&unicode_span, &root),
+        json!({"status": "ok", "value": [4, 11]})
+    );
 
     let commented_close = json!({
         "op": "upsert",
