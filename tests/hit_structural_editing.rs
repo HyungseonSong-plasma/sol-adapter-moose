@@ -215,10 +215,7 @@ fn generated_structure_rejects_duplicate_direct_parameters_only() {
 #[test]
 fn generated_structure_handles_unicode_crlf_and_comments_without_modification() {
     let text = "# α = comment\r\n[A]\r\n  p = 1 # comment\r\n  [./B] # nested\r\n    p = 2\r\n  [../]\r\n[]\r\n";
-    assert_eq!(
-        validate_generated_structure(text, &["A", "A/B"]),
-        Ok(())
-    );
+    assert_eq!(validate_generated_structure(text, &["A", "A/B"]), Ok(()));
     // Validation is read-only: the same original bytes remain available.
     assert!(text.starts_with("# α = comment\r\n"));
     assert!(text.ends_with("[]\r\n"));
