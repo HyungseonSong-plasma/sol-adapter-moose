@@ -2,6 +2,8 @@ use crate::backend::{
     probe_exact_phase1_target, BackendError, MooseProcessRunner, WorkspaceLayout,
     PHASE1_MOOSE_PACKAGE_FILENAME,
 };
+use crate::hit::validate_generated_structure;
+use crate::ir::MooseOperator;
 use crate::realization_v02::translate_steady_thermal_v02;
 use sol_adapter_protocol::{
     protocol_diagnostic, ActionExecutionReport, ActionExecutionState,
@@ -221,6 +223,53 @@ impl ExecutionEnvironment {
             protocol_operation_failure(
                 ProtocolOperation::ExecutePlan,
                 error,
+                SideEffectEvidence::None,
+            )
+        })?;
+
+        // Adapter-owned structural validation happens before workspace creation or
+        // any MOOSE process side effects. This is not a new SOL capability.
+        let mut required_paths = vec![
+            "Mesh".to_owned(),
+            "Variables".to_owned(),
+            "Kernels".to_owned(),
+            "BCs".to_owned(),
+            "Executioner".to_owned(),
+            "Outputs".to_owned(),
+        ];
+        if !model.materials.is_empty() {
+            required_paths.push("Materials".to_owned());
+        }
+        required_paths.extend(
+            model
+                .variables
+                .iter()
+                .map(|variable| format!("Variables/{}", variable.name)),
+        );
+        required_paths.extend(model.operators.iter().map(|operator| {
+            let name = match operator {
+                MooseOperator::Diffusion { name, .. }
+                | MooseOperator::HeatConduction { name, .. } => name,
+            };
+            format!("Kernels/{name}")
+        }));
+        required_paths.extend(
+            model
+                .materials
+                .iter()
+                .map(|material| format!("Materials/{}", material.name)),
+        );
+        required_paths.extend(
+            model
+                .boundary_conditions
+                .iter()
+                .map(|bc| format!("BCs/{}", bc.name)),
+        );
+        let required = required_paths.iter().map(String::as_str).collect::<Vec<_>>();
+        validate_generated_structure(&input, &required).map_err(|error| {
+            protocol_operation_failure(
+                ProtocolOperation::ExecutePlan,
+                format!("adapter-generated HIT structure is invalid: {error}"),
                 SideEffectEvidence::None,
             )
         })?;
