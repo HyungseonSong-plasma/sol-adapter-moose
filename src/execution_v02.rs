@@ -265,7 +265,10 @@ impl ExecutionEnvironment {
                 .iter()
                 .map(|bc| format!("BCs/{}", bc.name)),
         );
-        let required = required_paths.iter().map(String::as_str).collect::<Vec<_>>();
+        let required = required_paths
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
         validate_generated_structure(&input, &required).map_err(|error| {
             protocol_operation_failure(
                 ProtocolOperation::ExecutePlan,
