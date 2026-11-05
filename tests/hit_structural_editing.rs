@@ -1,6 +1,6 @@
 use sol_adaptor_moose::hit::{
     append_top_level_block, get_parameter, remove_block, remove_parameter, replace_block,
-    upsert_parameter, HitError, MooseInput,
+    upsert_parameter, validate_generated_structure, HitError, MooseInput,
 };
 
 const LF: &str = "# α comment\n[Variables]\n  [./u] # child\n    type = FVReal\n  [../]\n[]\n[Executioner]\n  type = Transient\n  dt = 1e-4 # keep\n[]\n";
@@ -151,4 +151,72 @@ fn ambiguous_child_assignments_do_not_change_parent_parameter_ownership() {
     let inserted = upsert_parameter(text, "A", "p", "parent").unwrap();
     assert!(inserted.contains("    p = child\n"));
     assert!(inserted.contains("  p = parent\n[]"));
+}
+
+#[test]
+fn generated_structure_accepts_existing_ir_fixture() {
+    const GENERATED: &str = include_str!("fixtures/backend/phase2_generated_diffusion.i");
+    let required = [
+        "Mesh",
+        "Variables",
+        "Variables/u",
+        "Kernels",
+        "Kernels/diffusion",
+        "BCs",
+        "BCs/left",
+        "BCs/right",
+        "Executioner",
+        "Outputs",
+    ];
+    assert_eq!(validate_generated_structure(GENERATED, &required), Ok(()));
+}
+
+#[test]
+fn generated_structure_rejects_missing_and_duplicate_block_paths() {
+    assert!(matches!(
+        validate_generated_structure("[Mesh]\n[]\n", &["Mesh", "Variables"]),
+        Err(HitError::BlockNotFound { path }) if path == "Variables"
+    ));
+    assert!(matches!(
+        validate_generated_structure("[A]\n  [B]\n  []\n  [B]\n  []\n[]\n", &[]),
+        Err(HitError::AmbiguousBlock { path, count: 2 }) if path == "A/B"
+    ));
+    assert!(matches!(
+        validate_generated_structure("[A]\n[]\n[A]\n[]\n", &[]),
+        Err(HitError::AmbiguousBlock { path, count: 2 }) if path == "A"
+    ));
+    assert!(matches!(
+        validate_generated_structure("[A]\n", &[]),
+        Err(HitError::UnclosedBlock { .. })
+    ));
+    assert!(matches!(
+        validate_generated_structure("[]\n", &[]),
+        Err(HitError::UnmatchedClose { .. })
+    ));
+}
+
+#[test]
+fn generated_structure_rejects_duplicate_direct_parameters_only() {
+    assert!(matches!(
+        validate_generated_structure("[A]\n  p = first\n  p = second\n[]\n", &[]),
+        Err(HitError::AmbiguousParameter { path, name, count: 2 })
+            if path == "A" && name == "p"
+    ));
+    assert!(matches!(
+        validate_generated_structure("p = first\np = second\n", &[]),
+        Err(HitError::AmbiguousParameter { path, name, count: 2 })
+            if path.is_empty() && name == "p"
+    ));
+    // A child assignment does not collide with its parent's assignment.
+    let nested = "[A]\n  p = parent\n  [./B]\n    p = child\n  [../]\n[]\n";
+    assert_eq!(validate_generated_structure(nested, &["A", "A/B"]), Ok(()));
+}
+
+#[test]
+fn generated_structure_handles_unicode_crlf_and_comments_without_modification() {
+    let text = "# α = comment\r\n[A]\r\n  p = 1 # comment\r\n  [./B] # nested\r\n    p = 2\r\n  [../]\r\n[]\r\n";
+    assert_eq!(validate_generated_structure(text, &["A", "A/B"]), Ok(()));
+    // Validation is read-only: the same original bytes remain available.
+    assert!(text.starts_with("# α = comment\r\n"));
+    assert!(text.ends_with("[]\r\n"));
 }

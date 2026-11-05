@@ -168,6 +168,62 @@ impl<'a> MooseInput<'a> {
     }
 }
 
+/// Check adapter-generated HIT structure without promoting HIT paths or offsets to SOL semantics.
+///
+/// This checks balanced blocks, unique block paths, required generated paths, and
+/// duplicate assignments *within the same direct block*. MOOSE object registration,
+/// parameter validity, and scientific correctness remain separate checks.
+pub fn validate_generated_structure(text: &str, required_paths: &[&str]) -> Result<(), HitError> {
+    let doc = MooseInput::parse(text)?;
+    let mut seen_paths = std::collections::BTreeSet::new();
+    for block in doc.blocks() {
+        if !seen_paths.insert(block.path.as_str()) {
+            return Err(HitError::AmbiguousBlock {
+                path: block.path.clone(),
+                count: doc.find(&block.path).len(),
+            });
+        }
+    }
+    for path in required_paths {
+        doc.unique(path)?;
+    }
+
+    let mut stack: Vec<&str> = Vec::new();
+    let mut assignments = std::collections::BTreeMap::new();
+    for segment in text.split_inclusive('\n') {
+        let line = segment.trim_end_matches(['\r', '\n']);
+        if let Some(token) = bracket_token(line) {
+            if token.is_empty() || token == "../" {
+                stack.pop();
+            } else {
+                stack.push(token.strip_prefix("./").unwrap_or(token));
+            }
+            continue;
+        }
+        let code = line.split_once('#').map_or(line, |(before, _)| before);
+        let Some((name, _)) = code.split_once('=') else {
+            continue;
+        };
+        let name = name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let path = stack.join("/");
+        let count = assignments
+            .entry((path.clone(), name.to_owned()))
+            .or_insert(0_usize);
+        *count += 1;
+        if *count > 1 {
+            return Err(HitError::AmbiguousParameter {
+                path,
+                name: name.to_owned(),
+                count: *count,
+            });
+        }
+    }
+    Ok(())
+}
+
 fn bracket_token(line: &str) -> Option<&str> {
     let body = line.trim_start();
     if !body.starts_with('[') {
