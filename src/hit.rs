@@ -168,16 +168,12 @@ impl<'a> MooseInput<'a> {
     }
 }
 
-
 /// Check adapter-generated HIT structure without promoting HIT paths or offsets to SOL semantics.
 ///
 /// This checks balanced blocks, unique block paths, required generated paths, and
 /// duplicate assignments *within the same direct block*. MOOSE object registration,
 /// parameter validity, and scientific correctness remain separate checks.
-pub fn validate_generated_structure(
-    text: &str,
-    required_paths: &[&str],
-) -> Result<(), HitError> {
+pub fn validate_generated_structure(text: &str, required_paths: &[&str]) -> Result<(), HitError> {
     let doc = MooseInput::parse(text)?;
     let mut seen_paths = std::collections::BTreeSet::new();
     for block in doc.blocks() {
