@@ -152,6 +152,26 @@ jobs:
           test "$(cat "$prefix/user-data/experiment.txt")" = "DO_NOT_DELETE"
           test -z "$(find "$prefix/lib/sol-adapter-moose/versions" -mindepth 1 -maxdepth 1 -print -quit)"
           echo "Install/reinstall/tamper/uninstall/no user data deletion: PASS"
+      - name: Checkout immutable SOL Runtime 0.2 consumer
+        uses: actions/checkout@v4
+        with:
+          repository: HyungseonSong-plasma/simulation-ontology
+          ref: b6924e6556684eec9dd93677518821cc7adc84b6
+          path: .sol-runtime-pinned
+      - name: Prove local acceptance runner can install, inspect and uninstall candidate
+        run: |
+          python3 -m py_compile scripts/package_adapter_candidate.py scripts/local_adapter_acceptance.py
+          archive="$(find "$RUNNER_TEMP/adapter-package" -name '*.tar.gz' -print -quit)"
+          python3 scripts/local_adapter_acceptance.py --archive "$archive" --sol-checkout .sol-runtime-pinned --evidence-dir "$RUNNER_TEMP/local-acceptance-smoke"
+          python3 - "$RUNNER_TEMP/local-acceptance-smoke/local-acceptance.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1]))
+          assert x['installed_adapter_describe']=='PASS'
+          assert x['unsupported_protocol_03']=='PASS'
+          assert x['adapter_removed']=='PASS'
+          assert x['moose_backend']=='NOT_RUN'
+          print('Local acceptance runner no-MOOSE packaging smoke: PASS')
+          PY
       - name: Upload candidate binary and proofs (NOT official release)
         uses: actions/upload-artifact@v4
         with:
