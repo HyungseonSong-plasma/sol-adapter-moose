@@ -16,6 +16,15 @@ pub const PHASE1_MOOSE_PACKAGE_SHA256: &str =
     "d7b2eec6b958f11455c903b70a16ea319b7edb68b4499537313c06785abd05b3";
 pub const PHASE1_REQUIRED_COPYABLE_INPUT: &str = "heat_transfer";
 
+// A separate, exact candidate profile based on observed macOS arm64 Conda
+// metadata. Do not weaken or replace the accepted Linux Phase 1 profile.
+pub const MACOS_ARM64_MOOSE_PACKAGE_VERSION: &str = "2026.09.13";
+pub const MACOS_ARM64_MOOSE_PACKAGE_BUILD: &str = "mpich";
+pub const MACOS_ARM64_MOOSE_PACKAGE_SUBDIR: &str = "osx-arm64";
+pub const MACOS_ARM64_MOOSE_PACKAGE_FILENAME: &str = "moose-2026.09.13-mpich.conda";
+pub const MACOS_ARM64_MOOSE_PACKAGE_SHA256: &str =
+    "2fcdc21ef5ebb7f416df89aa7e992c2f3c77c0e1ebfe39ab3d93705829b3ad73";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MooseCondaIdentity {
     pub name: String,
@@ -96,6 +105,29 @@ impl MooseCondaIdentity {
 
     pub fn validate_phase1_policy(&self) -> Result<(), BackendError> {
         require_equal("package name", &self.name, PHASE1_MOOSE_PACKAGE_NAME)?;
+
+        if self.subdir.as_deref() == Some(MACOS_ARM64_MOOSE_PACKAGE_SUBDIR) {
+            // This is a new candidate profile, not a generic macOS allowlist.
+            // Require present, exact Conda archive identity fields; a matching
+            // version alone never establishes backend readiness.
+            require_equal(
+                "package version",
+                &self.version,
+                MACOS_ARM64_MOOSE_PACKAGE_VERSION,
+            )?;
+            require_equal("package build", &self.build, MACOS_ARM64_MOOSE_PACKAGE_BUILD)?;
+            let filename = self.filename.as_deref().ok_or_else(|| {
+                BackendError::InvalidMetadata("macOS MOOSE package missing `fn`".to_owned())
+            })?;
+            require_equal("package filename", filename, MACOS_ARM64_MOOSE_PACKAGE_FILENAME)?;
+            let sha256 = self.sha256.as_deref().ok_or_else(|| {
+                BackendError::InvalidMetadata("macOS MOOSE package missing `sha256`".to_owned())
+            })?;
+            require_equal("package sha256", sha256, MACOS_ARM64_MOOSE_PACKAGE_SHA256)?;
+            return Ok(());
+        }
+
+        // Preserve previously established Linux Phase 1 acceptance semantics.
         require_equal(
             "package version",
             &self.version,
@@ -476,3 +508,101 @@ impl Display for BackendError {
 }
 
 impl std::error::Error for BackendError {}
+
+#[cfg(test)]
+mod supported_conda_package_profile_tests {
+    use super::*;
+
+    fn linux() -> MooseCondaIdentity {
+        MooseCondaIdentity {
+            name: PHASE1_MOOSE_PACKAGE_NAME.to_owned(),
+            version: PHASE1_MOOSE_PACKAGE_VERSION.to_owned(),
+            build: PHASE1_MOOSE_PACKAGE_BUILD.to_owned(),
+            subdir: Some(PHASE1_MOOSE_PACKAGE_SUBDIR.to_owned()),
+            filename: Some(PHASE1_MOOSE_PACKAGE_FILENAME.to_owned()),
+            sha256: Some(PHASE1_MOOSE_PACKAGE_SHA256.to_owned()),
+            channel: None,
+            url: None,
+        }
+    }
+
+    fn macos_arm64() -> MooseCondaIdentity {
+        MooseCondaIdentity {
+            name: PHASE1_MOOSE_PACKAGE_NAME.to_owned(),
+            version: MACOS_ARM64_MOOSE_PACKAGE_VERSION.to_owned(),
+            build: MACOS_ARM64_MOOSE_PACKAGE_BUILD.to_owned(),
+            subdir: Some(MACOS_ARM64_MOOSE_PACKAGE_SUBDIR.to_owned()),
+            filename: Some(MACOS_ARM64_MOOSE_PACKAGE_FILENAME.to_owned()),
+            sha256: Some(MACOS_ARM64_MOOSE_PACKAGE_SHA256.to_owned()),
+            channel: Some("https://conda.software.inl.gov/public/osx-arm64".to_owned()),
+            url: None,
+        }
+    }
+
+    #[test]
+    fn accepted_linux_profile_remains_unchanged() {
+        linux().validate_phase1_policy().unwrap();
+        // Historical Linux Phase 1 package records may omit optional metadata.
+        let mut legacy = linux();
+        legacy.subdir = None;
+        legacy.filename = None;
+        legacy.sha256 = None;
+        legacy.validate_phase1_policy().unwrap();
+    }
+
+    #[test]
+    fn observed_exact_macos_arm64_prebuilt_candidate_is_admitted() {
+        macos_arm64().validate_phase1_policy().unwrap();
+    }
+
+    #[test]
+    fn macos_profile_rejects_bad_version_build_filename_or_digest() {
+        let mut wrong_version = macos_arm64();
+        wrong_version.version = "2026.09.14".to_owned();
+        assert!(wrong_version.validate_phase1_policy().is_err());
+
+        let mut wrong_build = macos_arm64();
+        wrong_build.build = "nompi".to_owned();
+        assert!(wrong_build.validate_phase1_policy().is_err());
+
+        let mut wrong_filename = macos_arm64();
+        wrong_filename.filename = Some("moose-2026.09.13-other.conda".to_owned());
+        assert!(wrong_filename.validate_phase1_policy().is_err());
+
+        let mut wrong_digest = macos_arm64();
+        wrong_digest.sha256 = Some("0".repeat(64));
+        assert!(wrong_digest.validate_phase1_policy().is_err());
+    }
+
+    #[test]
+    fn macos_profile_requires_explicit_filename_and_checksum() {
+        let mut missing_filename = macos_arm64();
+        missing_filename.filename = None;
+        assert!(matches!(
+            missing_filename.validate_phase1_policy(),
+            Err(BackendError::InvalidMetadata(_))
+        ));
+
+        let mut missing_digest = macos_arm64();
+        missing_digest.sha256 = None;
+        assert!(matches!(
+            missing_digest.validate_phase1_policy(),
+            Err(BackendError::InvalidMetadata(_))
+        ));
+    }
+
+    #[test]
+    fn unrelated_host_or_forged_linux_identity_fails_closed() {
+        let mut wrong_host = macos_arm64();
+        wrong_host.subdir = Some("osx-64".to_owned());
+        assert!(wrong_host.validate_phase1_policy().is_err());
+
+        let mut mac_labeled_linux = linux();
+        mac_labeled_linux.subdir = Some(MACOS_ARM64_MOOSE_PACKAGE_SUBDIR.to_owned());
+        assert!(mac_labeled_linux.validate_phase1_policy().is_err());
+
+        let mut wrong_linux = linux();
+        wrong_linux.sha256 = Some("0".repeat(64));
+        assert!(wrong_linux.validate_phase1_policy().is_err());
+    }
+}
