@@ -128,6 +128,12 @@ def install(prefix: Path, archive: Path, checksum: Path, expect: str | None, act
     dest = installed_version(prefix, manifest)
     versions = dest.parent
     link = prefix / "bin" / NAME
+    # Preflight all existing ownership paths before creating any package state.
+    if (link.exists() and not link.is_symlink()) or (link.is_symlink() and
+            not link.resolve(strict=False).is_relative_to(versions.resolve())):
+        raise ValueError("cannot replace a non-owned active executable or symlink")
+    if dest.is_symlink():
+        raise ValueError("existing package version directory must not be a symlink")
     if dest.exists():
         if not dest.is_dir() or (dest / NAME).read_bytes() != binary or (
             dest / MANIFEST
