@@ -7,6 +7,7 @@ Distribution is a platform-specific DRAFT candidate, not a supported release.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import io
 import json
@@ -43,18 +44,19 @@ def git_sha(root: Path) -> str:
 
 def package_bytes(binary: bytes, manifest: bytes) -> bytes:
     out = io.BytesIO()
-    with tarfile.open(fileobj=out, mode="w:gz", format=tarfile.PAX_FORMAT) as tar:
-        for path, value, mode in (
-            (f"{NAME}/{BINARY}", binary, 0o755),
-            (f"{NAME}/{MANIFEST}", manifest, 0o644),
-        ):
-            entry = tarfile.TarInfo(path)
-            entry.size = len(value)
-            entry.mode = mode
-            entry.mtime = 0
-            entry.uid = entry.gid = 0
-            entry.uname = entry.gname = ""
-            tar.addfile(entry, io.BytesIO(value))
+    with gzip.GzipFile(filename="", mode="wb", fileobj=out, mtime=0) as gz:
+        with tarfile.open(fileobj=gz, mode="w", format=tarfile.USTAR_FORMAT) as tar:
+            for path, value, mode in (
+                (f"{NAME}/{BINARY}", binary, 0o755),
+                (f"{NAME}/{MANIFEST}", manifest, 0o644),
+            ):
+                entry = tarfile.TarInfo(path)
+                entry.size = len(value)
+                entry.mode = mode
+                entry.mtime = 0
+                entry.uid = entry.gid = 0
+                entry.uname = entry.gname = ""
+                tar.addfile(entry, io.BytesIO(value))
     return out.getvalue()
 
 
