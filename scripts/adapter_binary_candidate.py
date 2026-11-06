@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tarfile
@@ -83,8 +84,19 @@ def make(out: Path, binary_file: Path, source_dir: Path) -> None:
     binary = binary_file.read_bytes()
     if not binary:
         raise ValueError("binary is empty")
-    ldd = subprocess.run(["ldd", str(binary_file)], text=True, capture_output=True, check=False)
-    report = (ldd.stdout + ldd.stderr).strip()
+    if shutil.which("ldd"):
+        cmd = ["ldd", str(binary_file)]
+    elif shutil.which("otool"):
+        cmd = ["otool", "-L", str(binary_file)]
+    else:
+        cmd = None
+    if cmd is not None:
+        linked = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        # Linux ldd prints ASLR-dependent addresses: never include those in
+        # reproducibility-critical archive bytes.
+        report = re.sub(r"\\s+\\(0x[0-9a-fA-F]+\\)", "", (linked.stdout + linked.stderr)).strip()
+    else:
+        report = "linkage-inspection-command-not-available (no ABI claim)"
     manifest = {
         "kind": "SOL_MOOSE_ADAPTER_BINARY_CANDIDATE_NOT_A_RELEASE",
         "adapter_package_version": VERSION,
