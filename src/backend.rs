@@ -115,11 +115,19 @@ impl MooseCondaIdentity {
                 &self.version,
                 MACOS_ARM64_MOOSE_PACKAGE_VERSION,
             )?;
-            require_equal("package build", &self.build, MACOS_ARM64_MOOSE_PACKAGE_BUILD)?;
+            require_equal(
+                "package build",
+                &self.build,
+                MACOS_ARM64_MOOSE_PACKAGE_BUILD,
+            )?;
             let filename = self.filename.as_deref().ok_or_else(|| {
                 BackendError::InvalidMetadata("macOS MOOSE package missing `fn`".to_owned())
             })?;
-            require_equal("package filename", filename, MACOS_ARM64_MOOSE_PACKAGE_FILENAME)?;
+            require_equal(
+                "package filename",
+                filename,
+                MACOS_ARM64_MOOSE_PACKAGE_FILENAME,
+            )?;
             let sha256 = self.sha256.as_deref().ok_or_else(|| {
                 BackendError::InvalidMetadata("macOS MOOSE package missing `sha256`".to_owned())
             })?;
