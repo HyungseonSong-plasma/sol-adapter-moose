@@ -13,7 +13,11 @@ permissions:
 jobs:
   candidate:
     name: upstream-sdk-parity-and-binary-package
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Install pinned Rust
@@ -88,6 +92,8 @@ jobs:
           python3 scripts/package_adapter_candidate.py verify --archive "$archive"
           if command -v ldd >/dev/null 2>&1; then
             ldd target/release/sol-adaptor-moose | tee "$output/binary-dynamic-dependencies.txt"
+          elif command -v otool >/dev/null 2>&1; then
+            otool -L target/release/sol-adaptor-moose | tee "$output/binary-dynamic-dependencies.txt"
           else
             printf 'Dynamic-link inspection tool unavailable\n' > "$output/binary-dynamic-dependencies.txt"
           fi
@@ -149,7 +155,7 @@ jobs:
       - name: Upload candidate binary and proofs (NOT official release)
         uses: actions/upload-artifact@v4
         with:
-          name: moose-adapter-unreleased-candidate-${{ github.sha }}
+          name: moose-adapter-unreleased-candidate-${{ matrix.os }}-${{ github.sha }}
           path: |
             ${{ runner.temp }}/adapter-package/*.tar.gz
             ${{ runner.temp }}/adapter-package/*.sha256
