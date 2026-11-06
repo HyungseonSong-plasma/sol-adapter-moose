@@ -32,7 +32,23 @@ fn with_vv_only_instrumentation(production_input: &str) -> String {
 
     let instrumented =
         production_input.replacen("[Outputs]\n", &format!("{postprocessors}[Outputs]\n"), 1);
-    instrumented.replacen("  exodus = false\n", "  exodus = false\n  csv = true\n", 1)
+    instrumented.replacen("  exodus = false\n", "  exodus = true\n  csv = true\n", 1)
+}
+
+fn find_single_exodus(run_dir: &Path) -> PathBuf {
+    let exodus = fs::read_dir(run_dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("e"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        exodus.len(),
+        1,
+        "expected exactly one Exodus temperature field in {}, got {exodus:?}",
+        run_dir.display()
+    );
+    exodus.into_iter().next().unwrap()
 }
 
 fn find_single_csv(run_dir: &Path) -> PathBuf {
@@ -105,6 +121,7 @@ fn steady_thermal_slice_matches_predeclared_constant_field_benchmark() {
     assert!(input.contains("value_type = max"));
     assert!(input.contains("value_type = min"));
     assert!(input.contains("csv = true"));
+    assert!(input.contains("exodus = true"));
 
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/phase5-vv-evidence");
     let layout = WorkspaceLayout::new(&root, RUN_KEY).unwrap();
@@ -118,6 +135,13 @@ fn steady_thermal_slice_matches_predeclared_constant_field_benchmark() {
         output.status_code,
         output.timed_out,
         output.stderr_text()
+    );
+
+    let exodus_path = find_single_exodus(&layout.run_dir());
+    assert!(
+        fs::metadata(&exodus_path).unwrap().len() > 1024,
+        "expected nonempty native Exodus temperature field: {}",
+        exodus_path.display()
     );
 
     let csv_path = find_single_csv(&layout.run_dir());
