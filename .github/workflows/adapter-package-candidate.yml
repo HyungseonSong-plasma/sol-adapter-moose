@@ -44,6 +44,39 @@ jobs:
           cargo test --workspace --locked
           cargo clippy --workspace --all-targets --locked -- -D warnings
           cargo build --release --locked
+      - name: Checkout original vendored Adapter baseline
+        uses: actions/checkout@v4
+        with:
+          repository: HyungseonSong-plasma/sol-adapter-moose
+          ref: 467494ebc7ed2ae301148e65db7236a72fc7e928
+          path: .baseline
+      - name: Verify unchanged protocol wire behavior against vendored baseline
+        run: |
+          cargo build --release --locked --manifest-path .baseline/Cargo.toml
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          commands = [
+            {"jsonrpc":"2.0","id":1,"method":"describe_adapter"},
+            {"jsonrpc":"2.0","id":2,"method":"validate_plan",
+              "params":{"adapter_protocol_version":"0.3"}},
+            {"jsonrpc":"2.0","id":3,"method":"validate_plan",
+              "params":{"adapter_protocol_version":"0.1"}},
+            {"jsonrpc":"2.0","id":4,"method":"execute_plan",
+              "params":{"adapter_protocol_version":"0.3"}},
+          ]
+          wire="".join(json.dumps(c,sort_keys=True,separators=(",",":"))+"\\n" for c in commands)
+          results=[]
+          for binary in (pathlib.Path(".baseline/target/release/sol-adaptor-moose"),
+                         pathlib.Path("target/release/sol-adaptor-moose")):
+              result=subprocess.run([str(binary.resolve())],input=wire,text=True,
+                                    capture_output=True,timeout=20,check=True)
+              replies=[json.loads(line) for line in result.stdout.splitlines() if line]
+              assert len(replies)==len(commands), (binary,result.stdout,result.stderr)
+              results.append(replies)
+          for before,after in zip(*results):
+              assert before==after, {"before":before,"after":after}
+          print("Baseline vendored vs official SOL SDK: 4 canonical protocol responses identical")
+          PY
       - name: Create and verify deterministic native archive
         run: |
           set -euo pipefail
