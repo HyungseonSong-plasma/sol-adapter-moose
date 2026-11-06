@@ -76,9 +76,6 @@ def main() -> None:
         directory = install(archive, prefix)
         binary = directory / BINARY
         cmd = [str(binary)]
-        result = log_command(cmd, env | {},
-                             evidence / "describe.log",
-                             timeout=20) if False else None
         # Send one newline-delimited JSON-RPC request and inspect protocol payload.
         req = {"jsonrpc": "2.0", "id": 1, "method": "describe_adapter"}
         response = subprocess.run(cmd, input=json.dumps(req) + "\n",
