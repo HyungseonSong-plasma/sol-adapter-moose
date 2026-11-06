@@ -269,6 +269,11 @@ jobs:
     needs: [scope, rust]
     if: needs.scope.outputs.backend_needed == 'true'
     runs-on: ubuntu-latest
+    # The tested MOOSE conda target uses MPICH CH4/UCX. This CI executes
+    # one local rank only: avoid runner-dependent unsupported network devices.
+    # Keep this narrow CI setting separate from adapter runtime semantics.
+    env:
+      UCX_TLS: self,sm
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
