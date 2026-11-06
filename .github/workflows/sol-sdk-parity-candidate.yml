@@ -41,3 +41,28 @@ jobs:
           path: ${{ runner.temp }}/sol-adapter-sdk-parity/
           if-no-files-found: error
           retention-days: 30
+
+  native-package-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.80.1 --profile minimal
+          rustup default 1.80.1
+      - name: Compile candidate executable (no bundled MOOSE)
+        run: cargo build --release --locked --bin sol-adaptor-moose
+      - name: Verify binary candidate install/uninstall and error paths
+        env:
+          SOL_PACKAGE_CANDIDATE_EVIDENCE_DIR: ${{ runner.temp }}/sol-adapter-binary-candidate
+        run: |
+          python3 -m py_compile scripts/adapter_binary_candidate.py scripts/test_binary_candidate.py
+          python3 scripts/test_binary_candidate.py
+      - name: Upload native binary candidate (not released)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sol-adapter-binary-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/sol-adapter-binary-candidate/
+          if-no-files-found: error
+          retention-days: 30
