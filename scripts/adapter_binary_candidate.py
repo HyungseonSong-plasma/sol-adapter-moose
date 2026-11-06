@@ -94,7 +94,7 @@ def make(out: Path, binary_file: Path, source_dir: Path) -> None:
         linked = subprocess.run(cmd, text=True, capture_output=True, check=False)
         # Linux ldd prints ASLR-dependent addresses: never include those in
         # reproducibility-critical archive bytes.
-        report = re.sub(r"\\s+\\(0x[0-9a-fA-F]+\\)", "", (linked.stdout + linked.stderr)).strip()
+        report = re.sub(r"\s+\(0x[0-9a-fA-F]+\)", "", (linked.stdout + linked.stderr)).strip()
     else:
         report = "linkage-inspection-command-not-available (no ABI claim)"
     manifest = {
