@@ -381,5 +381,6 @@ jobs:
             target/phase5-vv-evidence/thermal-vv.json
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/input.i
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/*.csv
+            target/phase5-vv-evidence/runs/thermal-constant-field-vv/*.e
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/stdout.log
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/stderr.log
