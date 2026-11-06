@@ -16,6 +16,25 @@ Git, Python 3.9+ standard library, Rust/Cargo with project-supported Rust >=1.80
 
 Native installer script uses only Python stdlib, does not require sudo, does not write global PATH, and installs into a user-selected test prefix. On macOS, do not install Linux binary; obtain a matching macOS candidate or build an appropriately tested candidate from the exact Adapter source. Windows-native binary and installer testing are still a separate acceptance gate; Windows users can use WSL for Linux checks but this **does not certify Windows-native compatibility**.
 
+## Experimental macOS arm64 pre-built MOOSE profile (unreleased)
+
+The Adapter backend now has a **candidate, exact-record** macOS arm64 Conda profile, in addition to the unchanged accepted Linux Phase 1 profile. This change concerns *backend eligibility only*, not SOL Public Contract or Adapter Protocol version support. It does not mean that a real macOS solve has succeeded.
+
+| Conda metadata | Candidate required value |
+| --- | --- |
+| package name | `moose` |
+| version | `2026.09.13` |
+| build | `mpich` |
+| subdir | `osx-arm64` |
+| fn | `moose-2026.09.13-mpich.conda` |
+| sha256 | `2fcdc21ef5ebb7f416df89aa7e992c2f3c77c0e1ebfe39ab3d93705829b3ad73` |
+
+These values are from a **user-reported local Conda package record**. They are candidate identity inputs, not cryptographically independent verification of installed executable bytes or a scientific V&V verdict. A missing/incorrect macOS filename or SHA is rejected. The existing Linux accepted `2026.08.12 / mpich / linux-64` record and its historical optional-metadata behavior are preserved.
+
+**Local execution:** obtain the exact latest passing Draft PR #43 source (do not replace an existing, modified checkout), build `sol-adaptor-moose` natively on `osx-arm64` with `cargo build --release --locked`, package it with `python3 scripts/package_adapter_candidate.py build --binary target/release/sol-adaptor-moose --output-dir <isolated-package-dir>`, and run the existing `scripts/local_adapter_acceptance.py` with `--moose-executable` set to the absolute path of the installed pre-built Conda `bin/moose` executable. Use the exact accepted SOL Runtime source revision required by the script and a fresh isolated evidence directory.
+
+The Adapter separately probes `--version`, `--show-type`, `--show-copyable-inputs` (must include `heat_transfer`) and `--help`. The Runtime then performs `--check-input` and actual 1D Steady Thermal execution. A probe PASS is *not* a native solver PASS. Preserve full logs and report unsupported objects, MOOSE runtime failures or numeric discrepancies distinctly. Do not use the Linux x86_64 binary archive on macOS; do not publish a stable macOS release, merge a Draft, or claim Protocol 0.3 support from this candidate.
+
 ## Step 1 — obtain an exact-commit verified artifact
 
 1. In [Adapter Draft PR #43](https://github.com/HyungseonSong-plasma/sol-adapter-moose/pull/43) open **Checks** and select the successful `Adapter Package Candidate and SOL Contract Parity` run for the exact PR head. The run provides `moose-adapter-unreleased-candidate-<runner>-<sha>`. Download the ZIP and extract it into a private working directory.
