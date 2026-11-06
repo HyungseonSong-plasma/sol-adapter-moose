@@ -1,0 +1,60 @@
+name: Official SOL SDK-linked Adapter native package candidate
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/adapter_binary_candidate.py"
+      - "scripts/test_binary_candidate.py"
+      - ".github/workflows/official-sdk-binary-candidate.yml"
+  push:
+    branches: ["packaging/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-source-package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: |
+          rustup toolchain install 1.80.1 --profile minimal
+          rustup default 1.80.1
+      - name: Check official SDK source dependencies
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path("Cargo.toml").read_text()
+          lock=Path("Cargo.lock").read_text()
+          pin="b6924e6556684eec9dd93677518821cc7adc84b6"
+          for name in ("sol-public-contract","sol-adapter-protocol","sol-adapter-transport"):
+              assert f'{name} = {{ git = ' in text
+              assert f'rev = "{pin}"' in text
+              assert f'name = "{name}"' in lock
+              assert f"rev={pin}#{pin}" in lock
+          assert 'path = "vendor/' not in text
+          print("All production Contract SDK dependencies pinned to official SOL SHA")
+          PY
+      - name: Build native executable linked to official SDK
+        run: cargo build --release --locked --bin sol-adaptor-moose
+      - name: Verify package integrity and safe scoped install
+        env:
+          SOL_PACKAGE_CANDIDATE_EVIDENCE_DIR: ${{ runner.temp }}/sol-adapter-binary-candidate
+        run: |
+          python3 -m py_compile scripts/adapter_binary_candidate.py scripts/test_binary_candidate.py
+          python3 scripts/test_binary_candidate.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sol-adapter-native-sdk-candidate-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          path: ${{ runner.temp }}/sol-adapter-binary-candidate/
+          if-no-files-found: error
+          retention-days: 30
