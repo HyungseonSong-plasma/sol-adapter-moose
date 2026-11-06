@@ -13,11 +13,7 @@ permissions:
 jobs:
   candidate:
     name: upstream-sdk-parity-and-binary-package
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-14]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install pinned Rust
@@ -175,7 +171,7 @@ jobs:
       - name: Upload candidate binary and proofs (NOT official release)
         uses: actions/upload-artifact@v4
         with:
-          name: moose-adapter-unreleased-candidate-${{ matrix.os }}-${{ github.sha }}
+          name: moose-adapter-unreleased-candidate-linux-${{ github.sha }}
           path: |
             ${{ runner.temp }}/adapter-package/*.tar.gz
             ${{ runner.temp }}/adapter-package/*.sha256
