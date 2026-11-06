@@ -104,16 +104,22 @@ printf '{"jsonrpc":"2.0","method":"describe_adapter","id":1}\n' \
 
 ```bash
 unset SOL_MOOSE_EXECUTABLE
-python3 - "$ADAPTER_ROOT/tests/fixtures/sol/0.2/thermal-realization-request.json" <<'PY' \
+python3 - "$ADAPTER_ROOT/tests/fixtures/sol/0.2/thermal-realization-request.json" \
+  "$SOL_QA_ROOT/results/adapter-preflight-request.json" <<'PY'
+import json,sys
+with open(sys.argv[1]) as f:
+    request=json.load(f)
+with open(sys.argv[2],"w") as f:
+    json.dump({"jsonrpc":"2.0","method":"validate_plan","id":2,"params":request},f)
+    f.write("\n")
+PY
+
+cat "$SOL_QA_ROOT/results/adapter-preflight-request.json" \
   | "$ADAPTER_BIN" | python3 -m json.tool \
   | tee "$SOL_QA_ROOT/results/adapter-missing-backend.json"
-import json,sys
-request=json.load(open(sys.argv[1]))
-print(json.dumps({"jsonrpc":"2.0","method":"validate_plan","id":2,"params":request}))
-PY
 ```
 
-**PASS:** explicit Protocol 0.2 preflight returns `unavailable` / `adapter.transient_unavailable`. The Adapter must not silently invent a result or execute MOOSE. If your shell rejects a heredoc-and-pipeline combination, write the generated JSON request to a temporary file and pipe it separately instead.
+**PASS:** explicit Protocol 0.2 preflight returns `unavailable` / `adapter.transient_unavailable`. The Adapter must not silently invent a result or execute MOOSE. The request JSON is written first, then passed to the Adapter, avoiding shell heredoc/pipeline ambiguity.
 
 ## 5. Actual MOOSE execution via SOL Runtime (only if installed)
 
