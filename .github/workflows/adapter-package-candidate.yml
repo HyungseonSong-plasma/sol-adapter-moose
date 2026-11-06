@@ -64,7 +64,7 @@ jobs:
             {"jsonrpc":"2.0","id":4,"method":"execute_plan",
               "params":{"adapter_protocol_version":"0.3"}},
           ]
-          wire="".join(json.dumps(c,sort_keys=True,separators=(",",":"))+"\\n" for c in commands)
+          wire="".join(json.dumps(c,sort_keys=True,separators=(",",":"))+"\n" for c in commands)
           results=[]
           for binary in (pathlib.Path(".baseline/target/release/sol-adaptor-moose"),
                          pathlib.Path("target/release/sol-adaptor-moose")):
