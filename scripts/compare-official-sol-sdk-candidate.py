@@ -23,8 +23,12 @@ PACKAGES = ["sol-public-contract", "sol-adapter-protocol", "sol-adapter-transpor
 
 
 def command(args: list[str], *, cwd: Path, env: dict[str,str] | None = None) -> str:
-    completed = subprocess.run(args, cwd=cwd, env=env, check=True, text=True,
-                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    completed = subprocess.run(args, cwd=cwd, env=env, text=True,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if completed.returncode:
+        raise RuntimeError(
+            f"Command failed: {args}: stdout={completed.stdout[-1500:]} stderr={completed.stderr[-3500:]}"
+        )
     print(f"[Adapter P3] {' '.join(args[:3])} ... PASS")
     return completed.stdout
 
