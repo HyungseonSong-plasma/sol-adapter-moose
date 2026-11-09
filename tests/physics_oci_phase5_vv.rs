@@ -131,17 +131,17 @@ fn explicit_oci_thermal_scalar_and_exodus_evidence_matches_benchmark() {
     );
 
         let field = fs::read_dir(layout.run_dir())
-            .unwrap()
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("e"))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            field.len(),
-            1,
-            "OCI V&V requires exactly one native Exodus field"
-        );
-        assert!(fs::metadata(&field[0]).unwrap().len() > 1024);
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("e"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        field.len(),
+        1,
+        "OCI V&V requires exactly one native Exodus field"
+    );
+    assert!(fs::metadata(&field[0]).unwrap().len() > 1024);
 
     let csv_path = find_single_csv(&layout.run_dir());
     let (observed_min_k, observed_max_k) = parse_extremes(&csv_path);
