@@ -62,8 +62,14 @@ pub fn verify_local_image() -> Result<String, BackendError> {
         ));
     }
     let required = [
-        (&["Config", "Labels", "io.physics.moose.sha"][..], MOOSE_SOURCE),
-        (&["Config", "Labels", "io.physics.build-base.ref"][..], BUILD_BASE),
+        (
+            &["Config", "Labels", "io.physics.moose.sha"][..],
+            MOOSE_SOURCE,
+        ),
+        (
+            &["Config", "Labels", "io.physics.build-base.ref"][..],
+            BUILD_BASE,
+        ),
         (
             &["Config", "Labels", "io.physics.source.owner"][..],
             "moose-test-repo/physics_app",
