@@ -1,3 +1,4 @@
+use crate::physics_oci;
 use serde_json::Value;
 use std::fmt::{Display, Formatter};
 use std::fs;
@@ -5,7 +6,10 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::thread;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
+
+static OCI_CID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub const PHASE1_MOOSE_PACKAGE_NAME: &str = "moose";
 pub const PHASE1_MOOSE_PACKAGE_VERSION: &str = "2026.08.12";
@@ -153,6 +157,7 @@ impl ProcessOutput {
 pub struct MooseProcessRunner {
     executable: PathBuf,
     timeout: Duration,
+    physics_oci: bool,
 }
 
 impl MooseProcessRunner {
@@ -160,6 +165,27 @@ impl MooseProcessRunner {
         Self {
             executable: executable.into(),
             timeout,
+            physics_oci: false,
+        }
+    }
+
+    pub fn physics_oci(timeout: Duration) -> Self {
+        Self {
+            executable: PathBuf::from("docker"),
+            timeout,
+            physics_oci: true,
+        }
+    }
+
+    pub fn is_physics_oci(&self) -> bool {
+        self.physics_oci
+    }
+
+    pub fn effective_executable(&self) -> String {
+        if self.physics_oci {
+            physics_oci::EXECUTABLE.to_owned()
+        } else {
+            self.executable.display().to_string()
         }
     }
 
@@ -168,6 +194,9 @@ impl MooseProcessRunner {
     }
 
     pub fn inferred_conda_prefix(&self) -> Option<PathBuf> {
+        if self.physics_oci {
+            return None;
+        }
         let bin = self.executable.parent()?;
         if bin.file_name().and_then(|name| name.to_str()) != Some("bin") {
             return None;
@@ -192,15 +221,27 @@ impl MooseProcessRunner {
         args: &[&str],
         working_dir: Option<&Path>,
     ) -> Result<ProcessOutput, BackendError> {
-        let mut command = Command::new(&self.executable);
+        let cid_file = self.physics_oci.then(|| {
+            std::env::temp_dir().join(format!(
+                "sol-adaptor-moose-oci-{}-{}.cid",
+                std::process::id(),
+                OCI_CID_COUNTER.fetch_add(1, Ordering::Relaxed)
+            ))
+        });
+        let mut command = if let Some(cid_file) = &cid_file {
+            physics_oci::docker_command(args, working_dir, cid_file)?
+        } else {
+            let mut command = Command::new(&self.executable);
+            command.args(args);
+            if let Some(working_dir) = working_dir {
+                command.current_dir(working_dir);
+            }
+            command
+        };
         command
-            .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        if let Some(working_dir) = working_dir {
-            command.current_dir(working_dir);
-        }
 
         let mut child = command.spawn().map_err(|error| BackendError::Spawn {
             executable: self.executable.clone(),
@@ -226,12 +267,19 @@ impl MooseProcessRunner {
             {
                 Some(status) => break (status, false),
                 None if Instant::now() >= deadline => {
-                    child.kill().map_err(|error| {
-                        BackendError::Process(format!("kill timed-out child: {error}"))
-                    })?;
+                    // Killing the Docker CLI alone may leave its container
+                    // executing. Explicitly terminate the CID before waiting.
+                    let container_cleanup = cid_file
+                        .as_ref()
+                        .map(|cid| physics_oci::terminate_container(cid))
+                        .transpose();
+                    let _ = child.kill();
                     let status = child.wait().map_err(|error| {
                         BackendError::Process(format!("wait after timeout: {error}"))
                     })?;
+                    if let Err(error) = container_cleanup {
+                        return Err(error);
+                    }
                     break (status, true);
                 }
                 None => thread::sleep(Duration::from_millis(20)),
@@ -240,6 +288,9 @@ impl MooseProcessRunner {
 
         let stdout = join_reader(stdout_reader, "stdout")?;
         let stderr = join_reader(stderr_reader, "stderr")?;
+        if let Some(cid_file) = cid_file {
+            let _ = fs::remove_file(cid_file);
+        }
         Ok(ProcessOutput {
             status_code: exit_code(status),
             stdout,
