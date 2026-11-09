@@ -6,6 +6,8 @@
 use crate::backend::BackendError;
 use serde_json::Value;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -141,6 +143,21 @@ pub fn docker_command(
                 "Physics OCI workspace path contains an unsupported mount character".to_owned(),
             ));
         }
+        // The OCI runtime drops ALL capabilities. Its default root identity
+        // cannot open a runner-owned mode-0755 bind mount for CSV/Exodus output.
+        // Select the host directory owner instead of granting DAC_OVERRIDE.
+        #[cfg(unix)]
+        {
+            let owner = fs::metadata(&real).map_err(|error| BackendError::Io {
+                context: format!("read OCI workspace ownership {}", real.display()),
+                detail: error.to_string(),
+            })?;
+            command.arg("--user").arg(format!("{}:{}", owner.uid(), owner.gid()));
+        }
+        #[cfg(not(unix))]
+        return Err(BackendError::Process(
+            "Physics OCI workspace execution requires a verified Unix host UID/GID".to_owned(),
+        ));
         command
             .arg("--mount")
             .arg(format!("type=bind,src={path},dst=/work"))
