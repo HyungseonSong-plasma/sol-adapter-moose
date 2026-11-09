@@ -343,6 +343,67 @@ jobs:
             --request target/physics-oci-sol-consumer/request.json \
             --adapter-sha "$HEAD_SHA" --runtime-sha "$SOL_SHA" \
             --output target/physics-oci-sol-consumer/parity.json
+      - name: OCI Phase5 independent numerical V&V and same-run CSV/Exodus field
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          unset SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
+          cargo test --test phase5_thermal_vv --locked -- --nocapture
+          root=target/physics-oci-phase5/phase5-vv-evidence
+          test -s "$root/thermal-vv.json"
+          test -s "$root/runs/thermal-constant-field-vv/input_out.csv"
+          test -s "$root/runs/thermal-constant-field-vv/input_out.e"
+          python3 -m pip install --disable-pip-version-check 'scipy==1.14.1'
+          python3 scripts/verify_thermal_same_run_evidence.py \
+            --evidence-root "$root" \
+            --required-backend-profile physics_oci_thermal_v1 \
+            --output "$root/thermal-same-run-source-evidence.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path(
+              "target/physics-oci-phase5/phase5-vv-evidence/thermal-same-run-source-evidence.json"
+          ).read_text())
+          assert r["status"] == "NATIVE_SOURCE_SCALAR_FIELD_PAIR_VERIFIED"
+          assert r["canonical_result_semantics"] == "NOT_EVALUATED"
+          assert r["science_owner_signoff"] == "PENDING"
+          assert r["adapter_protocol_result_0_3"] == "NOT_IMPLEMENTED"
+          assert r["source_checkout_state"] == "EXACT_HEAD_OBSERVED_IN_CI"
+          print("OCI_THERMAL_NUMERICAL_SOURCE_VV=PASS; SCIENCE_SIGNOFF=PENDING")
+          PY
+      - name: Same-run CSV mutation must fail source-level V&V
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv, shutil
+          from pathlib import Path
+          source = Path("target/physics-oci-phase5/phase5-vv-evidence")
+          altered = Path("target/physics-oci-phase5-negative/phase5-vv-evidence")
+          shutil.copytree(source, altered)
+          csvpath = altered / "runs/thermal-constant-field-vv/input_out.csv"
+          with csvpath.open(newline="") as file:
+              rows = list(csv.reader(file))
+          index = rows[0].index("temperature_max_vv")
+          rows[-1][index] = str(float(rows[-1][index]) + 5.0)
+          with csvpath.open("w", newline="") as file:
+              writer = csv.writer(file)
+              writer.writerows(rows)
+          PY
+          if python3 scripts/verify_thermal_same_run_evidence.py \
+            --evidence-root target/physics-oci-phase5-negative/phase5-vv-evidence \
+            --required-backend-profile physics_oci_thermal_v1 \
+            --output target/physics-oci-phase5-negative/should-not-exist.json \
+            >target/physics-oci-phase5-negative/negative.log 2>&1; then
+            echo 'OCI_NUMERICAL_MUTATION_UNEXPECTED_PASS' >&2
+            exit 1
+          fi
+          test ! -e target/physics-oci-phase5-negative/should-not-exist.json
+          grep -Fq 'scalar/field numerical extrema differ' \
+            target/physics-oci-phase5-negative/negative.log
+          echo 'OCI_NUMERICAL_MUTATION=REJECTED_AS_EXPECTED'
       - name: Negative mutation must not pass parity
         shell: bash
         env:
@@ -374,6 +435,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
           path: |
+            target/physics-oci-phase5/phase5-vv-evidence/thermal-vv.json
+            target/physics-oci-phase5/phase5-vv-evidence/thermal-same-run-source-evidence.json
+            target/physics-oci-phase5/phase5-vv-evidence/runs/*/input.i
+            target/physics-oci-phase5/phase5-vv-evidence/runs/*/*.csv
+            target/physics-oci-phase5/phase5-vv-evidence/runs/*/*.e
+            target/physics-oci-phase5/phase5-vv-evidence/runs/*/*.log
+            target/physics-oci-phase5-negative/negative.log
             target/physics-oci-evidence/*.json
             target/physics-oci-native/runs/*/input.i
             target/physics-oci-native/runs/*/*.log
