@@ -41,20 +41,23 @@ impl ExecutionEnvironment {
     pub fn from_environment() -> Self {
         let profile = std::env::var("SOL_MOOSE_BACKEND_PROFILE").ok();
         let (runner, profile_error) = match profile.as_deref() {
-            None | Some("conda") => (
+            // OCI is the default for the already-supported Thermal 0.2 slice.
+            // Exact-Conda release compatibility remains explicitly selectable,
+            // not an automatic fallback when OCI is missing or incompatible.
+            Some("conda") => (
                 std::env::var_os("SOL_MOOSE_EXECUTABLE").map(|path| {
                     MooseProcessRunner::new(PathBuf::from(path), DEFAULT_BACKEND_TIMEOUT)
                 }),
                 None,
             ),
-            Some(physics_oci::PROFILE) => {
+            None | Some(physics_oci::PROFILE) => {
                 if std::env::var_os("SOL_MOOSE_EXECUTABLE").is_some()
                     || std::env::var_os("SOL_MOOSE_CONDA_PREFIX").is_some()
                 {
                     (
                         None,
                         Some(
-                            "Physics OCI profile cannot mix Conda executable or prefix".to_owned(),
+                            "Physics OCI default/profile cannot mix Conda executable or prefix; select SOL_MOOSE_BACKEND_PROFILE=conda explicitly".to_owned(),
                         ),
                     )
                 } else {
