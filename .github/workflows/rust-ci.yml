@@ -269,47 +269,6 @@ jobs:
           PHYSICS_B1_SOURCE_ROOT: .parity/physics
         run: cargo test --test hit_b1_parity --locked -- --nocapture
 
-  inl-direct-archive-diagnostic:
-    needs: scope
-    if: needs.scope.outputs.backend_needed == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Probe direct archive endpoints independent of Conda repodata
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p target/inl-direct
-          printf 'filename\\thttp_status\\n' > target/inl-direct/head-status.tsv
-          base='https://conda.software.inl.gov/public/linux-64'
-          files=(
-            'moose-2026.08.12-mpich.conda'
-            'moose-libmesh-2026.06.05_ab36c00-mpich_1.conda'
-            'moose-libmesh-vtk-9.6.2-mpich_0.conda'
-            'moose-petsc-3.25.2-mpich_0.conda'
-            'moose-tools-2026.06.16-py314h843be8b_0.conda'
-            'moose-wasp-2026.06.15_d8777a8-build_0.conda'
-          )
-          any_bad=0
-          for name in "${files[@]}"; do
-            status=$(curl -sSIL --max-time 12 --retry 0 \
-              -o "target/inl-direct/${name}.head" \
-              -w '%{http_code}' "$base/$name") || status="unreachable"
-            printf '%s\\t%s\\n' "$name" "$status" | tee -a target/inl-direct/head-status.tsv
-            if [[ "$status" != 200 && "$status" != 206 ]]; then any_bad=1; fi
-          done
-          if (( any_bad != 0 )); then
-            echo 'Direct INL artifact URL access NOT proven: do not claim a bypass' >&2
-            exit 1
-          fi
-          echo 'Direct artifact HEAD endpoints reachable; checksum-download still unproven'
-      - name: Preserve direct-archive diagnostic receipts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: moose-inl-direct-head-diagnostic
-          if-no-files-found: warn
-          path: target/inl-direct/
-
   moose-backend:
     needs: [scope, rust]
     if: needs.scope.outputs.backend_needed == 'true'
@@ -361,7 +320,14 @@ jobs:
               cat "$log" >&2
               if (( attempt == 3 )) || \
                  ! grep -Eq 'HTTP (429|500|502|503|504)([[:space:]]|$)' "$log"; then
-                echo "Non-transient or exhausted Conda installation failure" >&2
+                if grep -Eq 'HTTP (429|500|502|503|504)([[:space:]]|$)' "$log"; then
+                  reason='INFRA_BLOCKED_TRANSIENT_EXHAUSTED'
+                else
+                  reason='PROVISIONING_FAILED_NON_TRANSIENT'
+                fi
+                printf '{"status":"%s","source":"INL_CONDA","attempt":%d,"release":"moose-2026.08.12-mpich","solver_started":false}\n' \
+                  "$reason" "$attempt" > target/phase1-provisioning-status.json
+                echo "Conda provisioning failed: $reason (solver not executed)" >&2
                 exit 1
               fi
               echo "INL channel transient HTTP error, retry ${attempt}/3" >&2
@@ -474,6 +440,7 @@ jobs:
           if-no-files-found: warn
           path: |
             target/phase1-conda-install-attempt-*.log
+            target/phase1-provisioning-status.json
             target/phase1-mpi-diagnostics/*
             target/phase1-moose-probe.json
             target/phase1-moose-conda-meta.json
