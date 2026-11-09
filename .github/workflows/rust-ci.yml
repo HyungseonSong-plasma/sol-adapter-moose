@@ -343,6 +343,23 @@ jobs:
             --request target/physics-oci-sol-consumer/request.json \
             --adapter-sha "$HEAD_SHA" --runtime-sha "$SOL_SHA" \
             --output target/physics-oci-sol-consumer/parity.json
+      - name: Load exact shared Thermal verifier from Draft PR 38
+        shell: bash
+        env:
+          VERIFIER_SOURCE_COMMIT: fd813490a0f2275175ee64f96f7f23851814254b
+          VERIFIER_SOURCE_BLOB: 35029268d543e37302a52a582d3e19c6a6c7782d
+        run: |
+          set -euo pipefail
+          # PR #38 owns the single verifier implementation until merged.
+          # Fetch the pinned commit without changing this PR's exact HEAD.
+          git fetch --no-tags --depth=1 origin "$VERIFIER_SOURCE_COMMIT"
+          actual_blob=$(git rev-parse "$VERIFIER_SOURCE_COMMIT:scripts/verify_thermal_same_run_evidence.py")
+          test "$actual_blob" = "$VERIFIER_SOURCE_BLOB"
+          git show "$VERIFIER_SOURCE_COMMIT:scripts/verify_thermal_same_run_evidence.py" \
+            > "$RUNNER_TEMP/verify_thermal_same_run_evidence.py"
+          test "$(git hash-object "$RUNNER_TEMP/verify_thermal_same_run_evidence.py")" = "$VERIFIER_SOURCE_BLOB"
+          echo "THERMAL_SOURCE_VERIFIER=$RUNNER_TEMP/verify_thermal_same_run_evidence.py" >> "$GITHUB_ENV"
+          echo "SHARED_VERIFIER_SOURCE_PIN=PASS commit=$VERIFIER_SOURCE_COMMIT blob=$VERIFIER_SOURCE_BLOB"
       - name: OCI Phase5 independent numerical V&V and same-run CSV/Exodus field
         shell: bash
         env:
@@ -356,7 +373,7 @@ jobs:
           test -s "$root/runs/thermal-constant-field-vv/input_out.csv"
           test -s "$root/runs/thermal-constant-field-vv/input_out.e"
           python3 -m pip install --disable-pip-version-check 'scipy==1.14.1'
-          python3 scripts/verify_thermal_same_run_evidence.py \
+          python3 "$THERMAL_SOURCE_VERIFIER" \
             --evidence-root "$root" \
             --required-backend-profile physics_oci_thermal_v1 \
             --output "$root/thermal-same-run-source-evidence.json"
@@ -392,7 +409,7 @@ jobs:
               writer = csv.writer(file)
               writer.writerows(rows)
           PY
-          if python3 scripts/verify_thermal_same_run_evidence.py \
+          if python3 "$THERMAL_SOURCE_VERIFIER" \
             --evidence-root target/physics-oci-phase5-negative/phase5-vv-evidence \
             --required-backend-profile physics_oci_thermal_v1 \
             --output target/physics-oci-phase5-negative/should-not-exist.json \
