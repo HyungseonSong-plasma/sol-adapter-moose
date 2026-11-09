@@ -4,6 +4,7 @@ pub mod backend;
 pub mod execution_v02;
 pub mod hit;
 pub mod ir;
+pub mod official_moose_oci;
 pub mod physics_oci;
 pub mod realization_v02;
 
