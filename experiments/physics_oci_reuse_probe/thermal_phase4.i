@@ -1,5 +1,4 @@
-# Source fixture from exact historical Adapter Native Phase-4 artifact #13493163467.
-# This file is research input only, not a canonical SOL model.
+# Adapter-local backend-only MOOSE IR. Not canonical SOL semantics.
 [Mesh]
   type = GeneratedMesh
   dim = 1
