@@ -56,9 +56,19 @@ jobs:
           export SOL_MOOSE_OCI_EXECUTABLE="$SOL_MOOSE_EXECUTABLE"
           cargo test --locked --test moose_execution_oci_candidate -- --nocapture 2>&1 \
             | tee target/official-moose-docker-candidate/rust/moose-protocol-oci.log
+          # Real separately spawned Adapter JSON-RPC process, two independent
+          # execute calls, replay-artifact isolation and fail-closed probes.
+          cargo test --locked --test oci_external_transport -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/oci-external-transport.log
           test -f target/phase5-vv-evidence/thermal-vv.json
           cp target/phase5-vv-evidence/thermal-vv.json \
             target/official-moose-docker-candidate/rust/thermal-vv.json
+      - name: Check analytic Thermal gradient on three meshes and altered boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 experiments/official_moose_docker_probe/gradient_vv.py \
+            | tee target/official-moose-docker-candidate/gradient-verdict.log
       - name: Preserve immutable digest, native CLI and numeric test evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -74,3 +84,5 @@ jobs:
             target/official-moose-docker-candidate/case/*.csv
             target/official-moose-docker-candidate/rust/*
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/*.csv
+            target/official-moose-docker-candidate/gradient/**
+            target/oci-external-transport-evidence/external-protocol-report.json
