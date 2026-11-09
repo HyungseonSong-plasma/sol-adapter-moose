@@ -4,8 +4,8 @@
 set -euo pipefail
 : "${MOOSE_DOCKER_PIN:?missing trusted pinned image}"
 : "${GITHUB_WORKSPACE:?missing workspace}"
-if [[ ! "$MOOSE_DOCKER_PIN" =~ ^idaholab/moose@sha256:[0-9a-f]{64}$ ]]; then
-  echo "MOOSE_DOCKER_PIN must be exact immutable official digest" >&2
+if [[ "$MOOSE_DOCKER_PIN" != 'idaholab/moose@sha256:47fc6c5bff5e86869e7c467f999e9585ece13af9ffd1f580fef5369728a93452' ]]; then
+  echo "MOOSE_DOCKER_PIN must equal the separately approved candidate digest" >&2
   exit 64
 fi
 workspace="$(realpath "$GITHUB_WORKSPACE")"
