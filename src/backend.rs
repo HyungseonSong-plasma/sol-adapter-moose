@@ -257,7 +257,9 @@ impl MooseProcessRunner {
         });
         let mut command = if let Some(cid_file) = &cid_file {
             match self.oci {
-                Some(OciBackend::Physics) => physics_oci::docker_command(args, working_dir, cid_file)?,
+                Some(OciBackend::Physics) => {
+                    physics_oci::docker_command(args, working_dir, cid_file)?
+                }
                 Some(OciBackend::OfficialMoose) => {
                     official_moose_oci::docker_command(args, working_dir, cid_file)?
                 }
