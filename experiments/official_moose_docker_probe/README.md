@@ -58,3 +58,37 @@ After the original four native Rust backend tests passed, [PR #50](https://githu
 **Latest exact-head proof:** [OCI CI #42617488600](https://github.com/HyungseonSong-plasma/sol-adapter-moose/actions/runs/42617488600), [artifact #13673386767](https://github.com/HyungseonSong-plasma/sol-adapter-moose/actions/runs/42617488600/artifacts/13673386767) (ZIP SHA256 `96fea5d3b57dc0fc7682b1f69f91d3a72c7cbd10bb21783b7f81e26a1946b42f`). Five real Adapter Rust tests (IR, realization, backend workspace, Phase 5 V&V, Protocol 0.2 OCI execution) all passed; the original pinned Docker Thermal/negative control passed. [Rust CI #42617488247](https://github.com/HyungseonSong-plasma/sol-adapter-moose/actions/runs/42617488247) passed rustfmt/tests/Clippy/central scope.
 
 **Remaining blocker:** the OCI profile is **a research candidate**, not a security-hardened system-wide or officially accepted backend selector. Its constructor is callable by code with a declared digest but does not independently authenticate the underlying process's OCI image; binding depends on the pinned CI wrapper and environment. A separately reviewed production transport must verify image identity inside the execution boundary and handle safe process cancellation, state/replay semantics, and provenance for all supported callers. External packaged subprocess protocol/SDK/GUI consumers, exact Conda identity parity, full scientific SOL/Physics sign-off, and native multirank MPI have not been accepted. Do not merge or change defaults on this evidence alone.
+
+## External JSON-RPC, failure isolation and analytic gradient verification
+
+**Evidence source:** 2026-11-09 [official OCI run #42619170458](https://github.com/HyungseonSong-plasma/sol-adapter-moose/actions/runs/42619170458), [artifact #13675276135](https://github.com/HyungseonSong-plasma/sol-adapter-moose/actions/runs/42619170458/artifacts/13675276135) (ZIP SHA256 `5241dbcb6c1b1e9f07ff0f616d9f24380e5de983edb813489c0c7d55c6f4c986`). The ZIP was read directly for `gradient/report.json` and `oci-external-transport-evidence/external-protocol-report.json`, not inferred from the CI checkmark.
+
+| Independent gate | Observed result | Boundary |
+| --- | --- | --- |
+| Real external Adapter binary, stdio JSON-RPC `validate_plan` and two `execute_plan` requests | **PASS**, valid Protocol 0.2 responses with real OCI solve | Local experimental external binary; other consumer SDKs have not been tested |
+| Two successive execute requests with the same canonical request | **PASS**, two distinct run keys and bit-identical persisted `input.i` | Proves fresh isolated workspaces, **not** exactly-once replay/idempotency or crash recovery |
+| Declared OCI Digest mismatch before startup | **PASS**, adapter nonzero exit, no workspace or stdout | Environment mismatch rejection, **not** independent runtime image custody |
+| Probe failure with `/usr/bin/false` | **PASS**, `ExecutionOutcome::Rejected`, no workspace | Fail-closed preflight; not a post-start failure/cancellation test |
+| Exact linear 1D Thermal gradient with 400 K and 300 K Dirichlet boundaries | **PASS** on `nx=4,8,16` | Exact linear benchmark, not broad-order convergence evidence |
+| Thermal negative boundary variation (right boundary 299 K, `nx=8`) | **PASS** | Shows the observed solution responds to changed boundary condition |
+
+### Recorded gradient results
+
+All below used the immutable OCI image digest above. The analytic temperature is `T(x) = 400 + (T_right-400) x` K over `x in [0,1]`. Tolerance was `1e-6 K`.
+
+| Case | T(0.25) observed / reference K | T(0.75) observed / reference K | Max abs error K |
+| --- | --- | --- | --- |
+| nx=4, right=300 K | 374.99999999999 / 375 | 324.99999999999 / 325 | 1.000444171950221e-11 |
+| nx=8, right=300 K | 375.00000000003 / 375 | 325.00000000003 / 325 | 3.001332515850663e-11 |
+| nx=16, right=300 K | 375 / 375 | 325 / 325 | 0 |
+| nx=8, right=299 K | 374.75 / 374.75 | 324.25 / 324.25 | 0 |
+
+### Explicitly incomplete acceptance gates
+
+1. **OCI executable custody: BLOCKED for production.** The new research-only `SOL_MOOSE_OCI_CANDIDATE_IMAGE` external process mode and `configured_official_oci_candidate()` check the requested digest and command responses, and CI supplies a repository-pinned wrapper. However the public constructor still accepts an arbitrary executable path: neither the method nor the external transport independently proves that the supplied executable invokes the exact OCI image. It must not be treated as a trusted production custody guarantee. Production needs a process-owned Docker/OCI executor that binds the digest at the invocation boundary and rejects untrusted paths.
+2. **Replay/recovery: PARTIALLY_EVALUATED.** Different workspaces and identical input bytes prove repeatability of the evaluated Thermal request, not side-effect idempotency, deterministic replay of prior results, crash recovery or timeout/container cancellation across a real subprocess.
+3. **Broader consumers: NOT_EVALUATED.** A real JSON-RPC stdio process was exercised, not every independently deployed SOL SDK, GUI or external adapter client. Its opt-in mode is not advertised or selected by default.
+4. **Extended science: NOT_EVALUATED.** The bounded 1D exact linear oracle does not establish nonlinearity, multirank MPI, mesh/time convergence, source-term physics or a SOL 0.3/Physics scientific signoff.
+5. **Frozen Conda backend: SEPARATE, NOT_REPLACED.** The exact Conda 2026.08.12 mpich identity remains mandatory in its original job. Passing OCI does not change the INL HTTP 502/provisioning verdict.
+
+**Governance:** Draft PR #50 must remain non-accepting and unmerged until the explicit transport-custody and additional compatibility/approval decisions are made. Default behavior remains the legacy Conda profile; the experimental CLI mode requires deliberate environment selection.
