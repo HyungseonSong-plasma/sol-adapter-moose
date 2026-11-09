@@ -39,7 +39,7 @@ def _read_sources(archive: Path | None, root: Path | None) -> dict[str, bytes]:
         with zipfile.ZipFile(archive) as z:
             if z.testzip() is not None:
                 raise ValueError("corrupt ZIP source")
-            names = set(z.namelist())
+            names = z.namelist()
             required = [SUMMARY, *(REL + item for item in FILES)]
             if any(names.count(name) != 1 for name in required):
                 raise ValueError("missing native same-run source member")
