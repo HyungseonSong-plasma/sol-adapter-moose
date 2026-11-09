@@ -109,6 +109,18 @@ fn pinned_python_rust_shared_contract_differential() {
         json!({"op": "upsert", "text": "[A]\n  p = 1\n  p = 2\n[]\n", "path": "A", "name": "p", "value": "3"}),
         json!({"op": "paths", "text": "[]\n"}),
         json!({"op": "paths", "text": "[A]\n"}),
+        // Additional source-backed shared-slice cases; historical Python and
+        // Rust remain independently called for each exact input.
+        json!({"op": "paths", "text": ""}),
+        json!({"op": "paths", "text": "# [NotABlock]\n[A]\n[]\n"}),
+        json!({"op": "paths", "text": "[A]\n[]\n[A]\n[]\n"}),
+        json!({"op": "unique", "text": "[A]\n  [./B]\n  [../]\n[]\n", "path": "A/B"}),
+        json!({"op": "children", "text": "[A]\n  [./B]\n  [../]\n  [./C]\n  [../]\n[]\n", "path": "A"}),
+        json!({"op": "get", "text": "[A]\n  p = 2 # retained\n  [./B]\n    q = 3\n  [../]\n[]\n", "path": "A", "name": "p"}),
+        json!({"op": "remove_param", "text": "[A]\n  p = 2\n  [./B]\n    q = 3\n  [../]\n[]\n", "path": "A", "name": "p"}),
+        json!({"op": "remove_block", "text": "[A]\n[]\n[B]\n[]\n", "path": "A"}),
+        json!({"op": "paths", "text": "[A]\r\n  [./B]\r\n  [../]\r\n[]\r\n"}),
+        json!({"op": "remove_param", "text": "[A]\n  p = 2\n[]\n", "path": "A", "name": "missing"}),
     ];
     for (index, case) in cases.iter().enumerate() {
         assert_eq!(
