@@ -63,10 +63,7 @@ fn assert_no_mock_containers(root: &Path) {
 
 #[test]
 fn docker_lease_normal_timeout_missing_cid_and_cleanup_failure() {
-    let state = std::env::temp_dir().join(format!(
-        "oci-lifecycle-mock-{}",
-        std::process::id()
-    ));
+    let state = std::env::temp_dir().join(format!("oci-lifecycle-mock-{}", std::process::id()));
     assert!(!state.exists(), "mock directory collision");
     fs::create_dir(&state).unwrap();
     let mock_dir = state.join("bin");
@@ -84,7 +81,10 @@ fn docker_lease_normal_timeout_missing_cid_and_cleanup_failure() {
 
     let lease = OciContainerLease::new().unwrap();
     let private_dir = lease.cid_file().parent().unwrap();
-    assert_eq!(fs::metadata(private_dir).unwrap().permissions().mode() & 0o777, 0o700);
+    assert_eq!(
+        fs::metadata(private_dir).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
     let command = docker_command(
         &["--check-input"],
         None,
@@ -92,7 +92,10 @@ fn docker_lease_normal_timeout_missing_cid_and_cleanup_failure() {
         lease.container_name(),
     )
     .unwrap();
-    let args = command.get_args().map(|v| v.to_string_lossy().into_owned()).collect::<Vec<_>>();
+    let args = command
+        .get_args()
+        .map(|v| v.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
     assert!(args.iter().any(|arg| arg == "--name"));
     assert!(args.iter().any(|arg| arg == lease.container_name()));
     lease.finalize().unwrap();
@@ -108,14 +111,20 @@ fn docker_lease_normal_timeout_missing_cid_and_cleanup_failure() {
     std::env::set_var("OCI_MOCK_MODE", "timeout");
     let runner = MooseProcessRunner::physics_oci(Duration::from_millis(150));
     let error = runner.run(&["-i", "input.i"]).unwrap_err();
-    assert!(error.to_string().contains("orphan OCI container"), "{error}");
+    assert!(
+        error.to_string().contains("orphan OCI container"),
+        "{error}"
+    );
     assert_no_mock_containers(&state);
 
     // Docker never wrote a CID, but the private random name still identifies
     // the orphan; cleanup must occur and the outcome is still an error.
     std::env::set_var("OCI_MOCK_MODE", "no_cid");
     let error = runner.run(&["-i", "input.i"]).unwrap_err();
-    assert!(error.to_string().contains("orphan OCI container"), "{error}");
+    assert!(
+        error.to_string().contains("orphan OCI container"),
+        "{error}"
+    );
     assert_no_mock_containers(&state);
 
     // A cleanup failure must NOT be treated as successful or self-healing.
@@ -131,7 +140,11 @@ fn docker_lease_normal_timeout_missing_cid_and_cleanup_failure() {
         .map(|item| item.path())
         .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("state"))
         .collect::<Vec<_>>();
-    assert_eq!(leftovers.len(), 1, "failed cleanup must retain truthful evidence");
+    assert_eq!(
+        leftovers.len(),
+        1,
+        "failed cleanup must retain truthful evidence"
+    );
     fs::remove_file(leftovers.pop().unwrap()).unwrap();
 
     // A forged CID is never trusted for docker kill/rm. Fail closed.
