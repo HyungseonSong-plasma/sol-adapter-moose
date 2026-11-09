@@ -1,0 +1,44 @@
+name: Official MOOSE Docker candidate (non-accepting)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  official-moose-docker-candidate:
+    name: Discover official image digest and run genuine Thermal input
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify exact PR source revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Probe official MOOSE OCI by resolved immutable digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 experiments/official_moose_docker_probe/probe.py \
+            --output target/official-moose-docker-candidate
+      - name: Preserve immutable digest, native CLI and numeric test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-moose-docker-candidate
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            target/official-moose-docker-candidate/report.json
+            target/official-moose-docker-candidate/resolved-image.txt
+            target/official-moose-docker-candidate/*.log
+            target/official-moose-docker-candidate/case/*.i
+            target/official-moose-docker-candidate/case/*.csv
