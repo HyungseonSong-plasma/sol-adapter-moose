@@ -31,7 +31,8 @@ fn invoke(
 ) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_sol-adaptor-moose"));
     command
-        .env("SOL_MOOSE_OCI_CANDIDATE_IMAGE", image)
+        .env_remove("SOL_MOOSE_BACKEND")
+        .env_remove("SOL_MOOSE_OCI_CANDIDATE_IMAGE")
         .env("SOL_MOOSE_OCI_EXECUTABLE", executable)
         .env("SOL_MOOSE_WORKSPACE_ROOT", root)
         .env("MOOSE_DOCKER_PIN", docker_pin)
@@ -40,6 +41,9 @@ fn invoke(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if !image.is_empty() {
+        command.env("SOL_MOOSE_OCI_CANDIDATE_IMAGE", image);
+    }
     let mut child = command.spawn().expect("start real Adapter transport");
     {
         let input = child.stdin.as_mut().expect("stdin pipe");
@@ -99,7 +103,7 @@ fn external_oci_protocol_v02_serialization_and_independent_runs() {
         &frames,
         &root,
         executable.as_os_str(),
-        APPROVED_CANDIDATE_IMAGE,
+        "", // OCI is the consumer's default; no backend or image selection is set.
         APPROVED_CANDIDATE_IMAGE,
     ));
     assert_eq!(observations.len(), 3);
@@ -172,6 +176,37 @@ fn external_oci_protocol_v02_serialization_and_independent_runs() {
         .unwrap(),
     )
     .unwrap();
+}
+
+#[test]
+fn default_oci_without_launcher_preserves_describe_and_fails_closed_on_execute() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("target/oci-default-without-launcher");
+    let _ = fs::remove_dir_all(&root);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_sol-adaptor-moose"));
+    command
+        .env_remove("SOL_MOOSE_BACKEND")
+        .env_remove("SOL_MOOSE_OCI_EXECUTABLE")
+        .env_remove("SOL_MOOSE_EXECUTABLE")
+        .env_remove("MOOSE_DOCKER_PIN")
+        .env("SOL_MOOSE_WORKSPACE_ROOT", &root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    {
+        let stdin = child.stdin.as_mut().unwrap();
+        stdin
+            .write_all(
+                rpc("execute_plan", serde_json::from_str(REQUEST).unwrap(), 99).as_bytes(),
+            )
+            .unwrap();
+    }
+    drop(child.stdin.take());
+    let response = parse(child.wait_with_output().unwrap());
+    assert_eq!(response.len(), 1);
+    assert_eq!(payload(&response[0])["execution"], "unavailable");
+    assert!(!root.exists(), "missing OCI launcher must not create a workspace");
 }
 
 #[test]
