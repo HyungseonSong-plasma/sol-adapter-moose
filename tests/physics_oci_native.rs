@@ -10,12 +10,16 @@ const REQUEST: &str = include_str!("fixtures/sol/0.2/thermal-realization-request
 
 #[test]
 fn actual_pinned_physics_oci_thermal_runs_with_adapter_owned_realization() {
-    if std::env::var("SOL_MOOSE_BACKEND_PROFILE").ok().as_deref() != Some(PROFILE) {
-        eprintln!(
-            "Physics OCI native test requires explicitly selected profile; not asserting PASS"
-        );
+    if std::env::var("SOL_MOOSE_NATIVE_OCI_TESTS").ok().as_deref() != Some("1") {
+        eprintln!("Native OCI default profile test requires explicit CI opt-in; NOT_EVALUATED");
         return;
     }
+    // This is a real end-to-end test of the *unconfigured default*, not an
+    // explicitly provided OCI profile. Legacy Conda must never be inferred.
+    assert!(
+        std::env::var_os("SOL_MOOSE_BACKEND_PROFILE").is_none(),
+        "default-profile test must run without SOL_MOOSE_BACKEND_PROFILE"
+    );
     assert!(std::env::var_os("SOL_MOOSE_EXECUTABLE").is_none());
     assert!(std::env::var_os("SOL_MOOSE_CONDA_PREFIX").is_none());
     let environment = ExecutionEnvironment::from_environment();
@@ -87,6 +91,7 @@ fn actual_pinned_physics_oci_thermal_runs_with_adapter_owned_realization() {
         "status": "PHYSICS_OCI_DIRECT_THERMAL_P2_P3_PASS",
         "image": IMAGE,
         "profile": PROFILE,
+        "profile_resolution": "DEFAULT_OCI_WITHOUT_ENV_OVERRIDE",
         "native_input": dir.join("input.i").display().to_string(),
         "scientific_acceptance": "NOT_EVALUATED",
         "conda_release_identity": "NOT_EQUIVALENT",
