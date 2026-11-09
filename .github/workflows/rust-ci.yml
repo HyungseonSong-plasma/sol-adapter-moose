@@ -197,7 +197,9 @@ jobs:
               tests/moose_backend_workspace.rs \
               tests/phase5_conformance.rs \
               tests/phase5_thermal_vv.rs \
-              tests/fixtures/backend; then
+              tests/fixtures/backend \
+              scripts/verify_sol_v02_native_parity.py \
+              tests/test_sol_v02_native_parity_receipt.py; then
             echo "backend_needed=false" >> "$GITHUB_OUTPUT"
           else
             echo "backend_needed=true" >> "$GITHUB_OUTPUT"
@@ -228,6 +230,8 @@ jobs:
       - name: Formatting
         if: steps.workspace.outputs.present == 'true'
         run: cargo fmt --all --check
+      - name: SOL thermal native parity comparator self-tests (no backend)
+        run: python3 -m unittest discover -s tests -p test_sol_v02_native_parity_receipt.py -v
       - name: Tests
         if: steps.workspace.outputs.present == 'true'
         run: cargo test --workspace --locked
@@ -265,6 +269,78 @@ jobs:
           PHYSICS_B1_SOURCE_ROOT: .parity/physics
         run: cargo test --test hit_b1_parity --locked -- --nocapture
 
+  sol-thermal-bootstrap:
+    name: SOL v0.2 + current Adapter protocol bootstrap (no native MOOSE)
+    needs: [scope, rust]
+    if: needs.scope.outputs.backend_needed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Confirm exact Adapter source revision
+        env:
+          ADAPTER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$ADAPTER_SHA"
+      - uses: actions/checkout@v4
+        with:
+          repository: HyungseonSong-plasma/simulation-ontology
+          ref: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          path: .sol-v02-runtime
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.80.0
+      - name: Prove existing frozen AP0.2 selection against PR adapter
+        shell: bash
+        env:
+          SOL_SHA: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+        run: |
+          set -euo pipefail
+          test "$(git -C .sol-v02-runtime rev-parse HEAD)" = "$SOL_SHA"
+          cargo build --locked --manifest-path .sol-v02-runtime/examples/external-runtime-v02/Cargo.toml
+          cargo build --locked --bin sol-adaptor-moose
+          mkdir -p target/sol-v02-bootstrap
+          jq -n --slurpfile plan tests/fixtures/sol/0.2/thermal-realization-request.json \
+            '{target:"moose",required_capabilities:["thermal.steady_conduction"],plan_request:$plan[0]}' \
+            >target/sol-v02-bootstrap/request.json
+          consumer="$PWD/.sol-v02-runtime/examples/external-runtime-v02/target/debug/sol-external-runtime-v02-consumer"
+          adapter="$PWD/target/debug/sol-adaptor-moose"
+          test -x "$consumer" && test -x "$adapter"
+          set +e
+          env -u SOL_MOOSE_EXECUTABLE -u SOL_MOOSE_CONDA_PREFIX \
+            SOL_MOOSE_WORKSPACE_ROOT="$PWD/target/sol-v02-bootstrap/no-backend" \
+            "$consumer" run "$adapter" target/sol-v02-bootstrap/request.json \
+            >target/sol-v02-bootstrap/no-backend.stdout \
+            2>target/sol-v02-bootstrap/no-backend.stderr
+          code=$?
+          set -e
+          test "$code" -ne 0
+          grep -Fq 'VALIDATION_REJECTED' target/sol-v02-bootstrap/no-backend.stderr
+          test ! -e target/sol-v02-bootstrap/no-backend
+          jq '.required_capabilities = ["plasma.controlled_electron_energy_diffusion"]' \
+            target/sol-v02-bootstrap/request.json >target/sol-v02-bootstrap/unsupported.json
+          set +e
+          env -u SOL_MOOSE_EXECUTABLE -u SOL_MOOSE_CONDA_PREFIX \
+            "$consumer" run "$adapter" target/sol-v02-bootstrap/unsupported.json \
+            >target/sol-v02-bootstrap/unsupported.stdout \
+            2>target/sol-v02-bootstrap/unsupported.stderr
+          code=$?
+          set -e
+          test "$code" -ne 0
+          grep -Fq 'NO_COMPATIBLE_CANDIDATE' target/sol-v02-bootstrap/unsupported.stderr
+          printf 'source=EXACT_HEAD\nsol=v0.2_PINNED\nadapter=PR_HEAD\n' \
+            >target/sol-v02-bootstrap/identity.txt
+          echo 'SOL_V02_CURRENT_ADAPTER_BOOTSTRAP=PASS; NATIVE_PARITY=NOT_EVALUATED'
+      - name: Preserve bounded SOL bootstrap evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sol-v02-adapter-bootstrap-evidence
+          path: target/sol-v02-bootstrap/
+          if-no-files-found: warn
   moose-backend:
     needs: [scope, rust]
     if: needs.scope.outputs.backend_needed == 'true'
@@ -348,6 +424,44 @@ jobs:
           cargo test --test phase5_thermal_vv --locked -- --nocapture 2>&1 \
             | tee target/phase5-vv-evidence/test.log
           test -f target/phase5-vv-evidence/thermal-vv.json
+      - uses: actions/checkout@v4
+        with:
+          repository: HyungseonSong-plasma/simulation-ontology
+          ref: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          path: .sol-v02-runtime
+          persist-credentials: false
+      - name: Actual SOL Runtime v0.2 -> Adapter -> MOOSE thermal parity
+        shell: bash
+        env:
+          SOL_RUNTIME_SHA: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          ADAPTER_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$ADAPTER_SOURCE_SHA"
+          test "$(git -C .sol-v02-runtime rev-parse HEAD)" = "$SOL_RUNTIME_SHA"
+          test -n "${SOL_MOOSE_EXECUTABLE:-}"
+          test -f target/phase4-execution-evidence/runs/thermal-realization-001/input.i
+          cargo build --locked --manifest-path .sol-v02-runtime/examples/external-runtime-v02/Cargo.toml
+          cargo build --locked --bin sol-adaptor-moose
+          mkdir -p target/sol-v02-native-evidence
+          jq -n --slurpfile plan tests/fixtures/sol/0.2/thermal-realization-request.json \
+            '{target:"moose",required_capabilities:["thermal.steady_conduction"],plan_request:$plan[0]}' \
+            >target/sol-v02-native-evidence/consumer-request.json
+          consumer="$PWD/.sol-v02-runtime/examples/external-runtime-v02/target/debug/sol-external-runtime-v02-consumer"
+          adapter="$PWD/target/debug/sol-adaptor-moose"
+          test -x "$consumer" && test -x "$adapter"
+          export SOL_MOOSE_WORKSPACE_ROOT="$PWD/target/sol-v02-native-evidence/external"
+          "$consumer" run "$adapter" target/sol-v02-native-evidence/consumer-request.json \
+            >target/sol-v02-native-evidence/consumer-result.json \
+            2>target/sol-v02-native-evidence/consumer.stderr
+          python3 scripts/verify_sol_v02_native_parity.py \
+            --external-result target/sol-v02-native-evidence/consumer-result.json \
+            --external-root target/sol-v02-native-evidence/external \
+            --direct-input target/phase4-execution-evidence/runs/thermal-realization-001/input.i \
+            --request target/sol-v02-native-evidence/consumer-request.json \
+            --adapter-sha "$ADAPTER_SOURCE_SHA" \
+            --sol-sha "$SOL_RUNTIME_SHA" \
+            --output target/sol-v02-native-evidence/parity-report.json
       - name: Preserve backend evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -355,6 +469,12 @@ jobs:
           name: moose-backend-evidence
           if-no-files-found: warn
           path: |
+            target/sol-v02-native-evidence/consumer-request.json
+            target/sol-v02-native-evidence/consumer-result.json
+            target/sol-v02-native-evidence/consumer.stderr
+            target/sol-v02-native-evidence/parity-report.json
+            target/sol-v02-native-evidence/external/runs/*/input.i
+            target/sol-v02-native-evidence/external/runs/*/*.log
             target/phase1-moose-probe.json
             target/phase1-moose-conda-meta.json
             target/phase1-conda-list.json
