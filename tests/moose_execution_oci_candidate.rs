@@ -19,7 +19,8 @@ fn canonical_thermal_v02_executes_with_explicit_oci_candidate_and_provenance() {
         return;
     };
 
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/phase4-oci-execution-evidence");
+    let root =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/phase4-oci-execution-evidence");
     let run_dir = root.join("runs").join(RUN_KEY);
     let _ = fs::remove_dir_all(&run_dir);
 
@@ -84,13 +85,21 @@ fn canonical_thermal_v02_executes_with_explicit_oci_candidate_and_provenance() {
 
     let provenance = response.provenance.as_ref().expect("execution provenance");
     assert_eq!(provenance.producer, "sol.adapter.moose");
-    assert!(provenance.opaque_references.iter().any(|reference|
-        reference.namespace == "moose.oci.image" &&
-        reference.reference == APPROVED_CANDIDATE_IMAGE
-    ), "OCI digest must appear in protocol provenance");
-    assert!(!provenance.opaque_references.iter().any(|reference|
-        reference.namespace == "moose.package"
-    ), "OCI candidate must never masquerade as frozen Conda package");
+    assert!(
+        provenance
+            .opaque_references
+            .iter()
+            .any(|reference| reference.namespace == "moose.oci.image"
+                && reference.reference == APPROVED_CANDIDATE_IMAGE),
+        "OCI digest must appear in protocol provenance"
+    );
+    assert!(
+        !provenance
+            .opaque_references
+            .iter()
+            .any(|reference| reference.namespace == "moose.package"),
+        "OCI candidate must never masquerade as frozen Conda package"
+    );
 
     assert!(provenance
         .opaque_references
