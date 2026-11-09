@@ -8,15 +8,10 @@ publish = false
 
 [workspace]
 resolver = "2"
-members = [
-    ".",
-    "vendor/sol-public-contract",
-    "vendor/sol-adapter-protocol",
-    "vendor/sol-adapter-transport",
-]
+members = ["."]
 
 [dependencies]
 serde_json = "=1.0.128"
-sol-public-contract = { path = "vendor/sol-public-contract" }
-sol-adapter-protocol = { path = "vendor/sol-adapter-protocol" }
-sol-adapter-transport = { path = "vendor/sol-adapter-transport" }
+sol-public-contract = { git = "https://github.com/HyungseonSong-plasma/simulation-ontology.git", rev = "b6924e6556684eec9dd93677518821cc7adc84b6", version = "=0.1.0" }
+sol-adapter-protocol = { git = "https://github.com/HyungseonSong-plasma/simulation-ontology.git", rev = "b6924e6556684eec9dd93677518821cc7adc84b6", version = "=0.1.0" }
+sol-adapter-transport = { git = "https://github.com/HyungseonSong-plasma/simulation-ontology.git", rev = "b6924e6556684eec9dd93677518821cc7adc84b6", version = "=0.1.0" }

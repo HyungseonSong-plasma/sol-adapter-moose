@@ -1,4 +1,16 @@
-# Vendored SOL contract/transport source
+# Archived vendored-contract provenance — replaced on P3 candidate branch
+
+**Status on `packaging/official-sol-contract-consumer`: historical record, not current compilation.**
+
+At Adapter Draft PR #43, the 16 previously duplicated source files under `vendor/sol-*` were deleted **after** accepted upstream git package builds, exact Cargo.lock dependency resolution, four request/response wire parity cases against the preserved `main@467494ebc7ed2ae301148e65db7236a72fc7e928` baseline, and a real MOOSE CI success checkpoint. The historical source remains inspectable at that exact `main` revision.
+
+This branch now consumes the **single upstream authority** `HyungseonSong-plasma/simulation-ontology@b6924e6556684eec9dd93677518821cc7adc84b6` (Cargo package version `=0.1.0`) for `sol-public-contract`, `sol-adapter-protocol`, and `sol-adapter-transport`. The presence of the upstream scalar Public Contract 0.3 implementation does **not** mean this Adapter advertises Public Contract 0.3 or Adapter Protocol 0.3. The supported adapter compatibility pair remains 0.1/0.2 only.
+
+**Release and acceptance gates remain open:** this is a Draft PR, and local workstation verification, approved immutable SOL/Adapter release distribution, human review and actual MOOSE scientific V&V are separate. If downstream parity fails, revert this specific branch to its original vendored baseline; do not silently modify upstream canonical semantics.
+
+---
+
+## Original vendored history (before P3)
 
 A0.1 consumes accepted SOL contract source snapshots from `HyungseonSong-plasma/simulation-ontology`.
 

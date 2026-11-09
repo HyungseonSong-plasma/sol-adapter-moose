@@ -191,6 +191,8 @@ jobs:
               src \
               tests/hit_structural_editing.rs \
               tests/moose_probe.rs \
+              scripts/verify_moose_ci_cache.py \
+              tests/test_moose_ci_cache.py \
               tests/moose_ir_check.rs \
               tests/moose_realization_v02_check.rs \
               tests/moose_execution_v02.rs \
@@ -231,6 +233,8 @@ jobs:
       - name: Tests
         if: steps.workspace.outputs.present == 'true'
         run: cargo test --workspace --locked
+      - name: Verify CI package-cache guard tests
+        run: python3 -m unittest discover -s tests -p 'test_moose_ci_cache.py' -v
       - name: Clippy
         if: steps.workspace.outputs.present == 'true'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -268,7 +272,7 @@ jobs:
   moose-backend:
     needs: [scope, rust]
     if: needs.scope.outputs.backend_needed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -282,40 +286,120 @@ jobs:
             https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
           bash "$RUNNER_TEMP/miniforge.sh" -b -p "$RUNNER_TEMP/miniforge"
           echo "$RUNNER_TEMP/miniforge/bin" >> "$GITHUB_PATH"
+          echo "CONDA_PKGS_DIRS=$RUNNER_TEMP/moose-pkg-cache" >> "$GITHUB_ENV"
+      - name: Restore exact verified MOOSE environment and packages
+        id: moose-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ runner.temp }}/moose-env
+            ${{ runner.temp }}/moose-pkg-cache
+          key: moose-linux64-ubuntu2404-20260812-mpich-6de33352a383-v1
       - name: Install exact MOOSE evidence target
         shell: bash
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/miniforge/bin/conda" create -y \
-            -p "$RUNNER_TEMP/moose-env" \
-            --override-channels \
-            -c https://conda.software.inl.gov/public \
-            -c conda-forge \
-            'moose=2026.08.12=mpich'
+          # A transient INL 429/5xx must not be mistaken for a solver failure.
+          # Retry at most three times; other errors fail closed on first attempt.
+          mkdir -p target
+          conda_bin="$RUNNER_TEMP/miniforge/bin/conda"
+          if [[ "${{ steps.moose-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "Verified cache candidate restored; skip INL channel download"
+          else
+            for attempt in 1 2 3; do
+              log="target/phase1-conda-install-attempt-${attempt}.log"
+              if "$conda_bin" create -y \
+                -p "$RUNNER_TEMP/moose-env" \
+                --override-channels \
+                -c https://conda.software.inl.gov/public \
+                -c conda-forge \
+                'moose=2026.08.12=mpich' >"$log" 2>&1; then
+                cat "$log"
+                break
+              fi
+              cat "$log" >&2
+              if (( attempt == 3 )) || \
+                 ! grep -Eq 'HTTP (429|500|502|503|504)([[:space:]]|$)' "$log"; then
+                if grep -Eq 'HTTP (429|500|502|503|504)([[:space:]]|$)' "$log"; then
+                  reason='INFRA_BLOCKED_TRANSIENT_EXHAUSTED'
+                else
+                  reason='PROVISIONING_FAILED_NON_TRANSIENT'
+                fi
+                printf '{"status":"%s","source":"INL_CONDA","attempt":%d,"release":"moose-2026.08.12-mpich","solver_started":false}\n' \
+                  "$reason" "$attempt" > target/phase1-provisioning-status.json
+                echo "Conda provisioning failed: $reason (solver not executed)" >&2
+                exit 1
+              fi
+              echo "INL channel transient HTTP error, retry ${attempt}/3" >&2
+              # Runner-owned, isolated target only; do not touch any user data.
+              rm -rf -- "$RUNNER_TEMP/moose-env"
+              sleep "$((attempt * 15))"
+            done
+          fi
           echo "SOL_MOOSE_EXECUTABLE=$RUNNER_TEMP/moose-env/bin/moose-opt" >> "$GITHUB_ENV"
           echo "SOL_MOOSE_CONDA_PREFIX=$RUNNER_TEMP/moose-env" >> "$GITHUB_ENV"
           mkdir -p target
           "$RUNNER_TEMP/miniforge/bin/conda" list -p "$RUNNER_TEMP/moose-env" --json \
             > target/phase1-conda-list.json
-          metadata=$(find "$RUNNER_TEMP/moose-env/conda-meta" -maxdepth 1 \
-            -name 'moose-*.json' -print -quit)
-          test -n "$metadata"
+          metadata="$RUNNER_TEMP/moose-env/conda-meta/moose-2026.08.12-mpich.json"
+          test -f "$metadata"
           cp "$metadata" target/phase1-moose-conda-meta.json
-      - name: Verify retained package archive when available
+      - name: Verify exact MOOSE and all dependency package SHA256
         shell: bash
         run: |
           set -euo pipefail
           expected='d7b2eec6b958f11455c903b70a16ea319b7edb68b4499537313c06785abd05b3'
-          archive=$(find "$RUNNER_TEMP/miniforge/pkgs" -maxdepth 1 \
-            -name 'moose-2026.08.12-mpich.conda' -print -quit || true)
-          if [[ -n "$archive" ]]; then
-            actual=$(sha256sum "$archive" | awk '{print $1}')
-            printf 'expected=%s\nactual=%s\narchive=%s\n' "$expected" "$actual" "$archive" \
-              | tee target/phase1-package-sha256.txt
-            test "$actual" = "$expected"
+          archive="$CONDA_PKGS_DIRS/moose-2026.08.12-mpich.conda"
+          test -f "$archive"
+          actual=$(sha256sum "$archive" | awk '{print $1}')
+          printf 'expected=%s\nactual=%s\narchive=%s\n' "$expected" "$actual" "$archive" \
+            | tee target/phase1-package-sha256.txt
+          test "$actual" = "$expected"
+          python3 scripts/verify_moose_ci_cache.py \
+            --prefix "$SOL_MOOSE_CONDA_PREFIX" \
+            --pkg-cache "$CONDA_PKGS_DIRS" \
+            --conda-list target/phase1-conda-list.json \
+            --output target/phase1-dependency-sha256-manifest.json
+          "$RUNNER_TEMP/miniforge/bin/conda" list --explicit --sha256 \
+            -p "$SOL_MOOSE_CONDA_PREFIX" > target/phase1-explicit-sha256.lock
+          sha256sum target/phase1-explicit-sha256.lock \
+            > target/phase1-explicit-sha256.lock.sha256
+      - name: Save exact verified MOOSE environment cache
+        if: steps.moose-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ runner.temp }}/moose-env
+            ${{ runner.temp }}/moose-pkg-cache
+          key: moose-linux64-ubuntu2404-20260812-mpich-6de33352a383-v1
+      - name: Diagnose default MOOSE MPI startup (non-accepting fallback)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/phase1-mpi-diagnostics
+          ldd "$SOL_MOOSE_EXECUTABLE" \
+            > target/phase1-mpi-diagnostics/ldd.log 2>&1 || true
+          ucx_info="$SOL_MOOSE_CONDA_PREFIX/bin/ucx_info"
+          if [[ -x "$ucx_info" ]]; then
+            "$ucx_info" -d \
+              > target/phase1-mpi-diagnostics/ucx-devices.log 2>&1 || true
+          fi
+          if "$SOL_MOOSE_EXECUTABLE" --version \
+            > target/phase1-mpi-diagnostics/default.stdout.log \
+            2> target/phase1-mpi-diagnostics/default.stderr.log; then
+            echo 'Unmodified MOOSE --version probe: PASS'
           else
-            printf 'expected=%s\narchive=not-retained-by-conda-cache\n' "$expected" \
-              | tee target/phase1-package-sha256.txt
+            original_status=$?
+            echo 'Unmodified MOOSE --version probe: FAIL' >&2
+            cat target/phase1-mpi-diagnostics/default.stderr.log >&2
+            # Diagnostic only. This alternate transport is NEVER a substitute
+            # for a passing unmodified baseline or the full MOOSE test suite.
+            UCX_TLS=self,sm,tcp "$SOL_MOOSE_EXECUTABLE" --version \
+              > target/phase1-mpi-diagnostics/ucx-limited.stdout.log \
+              2> target/phase1-mpi-diagnostics/ucx-limited.stderr.log || true
+            echo 'UCX_TLS=self,sm,tcp diagnostic completed; baseline remains FAIL' >&2
+            cat target/phase1-mpi-diagnostics/ucx-limited.stderr.log >&2
+            exit "$original_status"
           fi
       - name: Exact backend probe and input validation
         run: cargo test --test moose_probe --locked -- --nocapture
@@ -355,9 +439,15 @@ jobs:
           name: moose-backend-evidence
           if-no-files-found: warn
           path: |
+            target/phase1-conda-install-attempt-*.log
+            target/phase1-provisioning-status.json
+            target/phase1-mpi-diagnostics/*
             target/phase1-moose-probe.json
             target/phase1-moose-conda-meta.json
             target/phase1-conda-list.json
+            target/phase1-dependency-sha256-manifest.json
+            target/phase1-explicit-sha256.lock
+            target/phase1-explicit-sha256.lock.sha256
             target/phase1-package-sha256.txt
             target/phase2-generated/*.i
             target/phase3-realization-v02/*.i

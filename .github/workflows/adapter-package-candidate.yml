@@ -1,0 +1,180 @@
+name: Adapter Package Candidate and SOL Contract Parity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - packaging/official-sol-contract-consumer
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    name: upstream-sdk-parity-and-binary-package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.80.1 --profile minimal --component rustfmt --component clippy
+          rustup default 1.80.1
+      - name: Verify immutable official SOL dependency and Cargo.lock
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          manifest=pathlib.Path("Cargo.toml").read_text()
+          lock=pathlib.Path("Cargo.lock").read_text()
+          sha="b6924e6556684eec9dd93677518821cc7adc84b6"
+          url="https://github.com/HyungseonSong-plasma/simulation-ontology.git"
+          for name in ("sol-public-contract","sol-adapter-protocol","sol-adapter-transport"):
+              line=next(x for x in manifest.splitlines() if x.startswith(name+" = "))
+              assert f'git = "{url}"' in line and f'rev = "{sha}"' in line
+              assert 'version = "=0.1.0"' in line
+              block=next(b for b in lock.split("[[package]]") if f'name = "{name}"' in b)
+              assert f'git+{url}?rev={sha}#{sha}' in block
+          assert 'vendor/sol-' not in manifest
+          print("Official SOL dependency pin and lock source identities: PASS")
+          PY
+          cargo metadata --locked --format-version 1 --no-deps > /dev/null
+      - name: Build and test exact upstream pinned Adapter
+        run: |
+          cargo fmt --all --check
+          cargo test --workspace --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo build --release --locked
+      - name: Checkout original vendored Adapter baseline
+        uses: actions/checkout@v4
+        with:
+          repository: HyungseonSong-plasma/sol-adapter-moose
+          ref: 467494ebc7ed2ae301148e65db7236a72fc7e928
+          path: .baseline
+      - name: Verify unchanged protocol wire behavior against vendored baseline
+        run: |
+          cargo build --release --locked --manifest-path .baseline/Cargo.toml
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          commands = [
+            {"jsonrpc":"2.0","id":1,"method":"describe_adapter"},
+            {"jsonrpc":"2.0","id":2,"method":"validate_plan",
+              "params":{"adapter_protocol_version":"0.3"}},
+            {"jsonrpc":"2.0","id":3,"method":"validate_plan",
+              "params":{"adapter_protocol_version":"0.1"}},
+            {"jsonrpc":"2.0","id":4,"method":"execute_plan",
+              "params":{"adapter_protocol_version":"0.3"}},
+          ]
+          wire="".join(json.dumps(c,sort_keys=True,separators=(",",":"))+"\n" for c in commands)
+          results=[]
+          for binary in (pathlib.Path(".baseline/target/release/sol-adaptor-moose"),
+                         pathlib.Path("target/release/sol-adaptor-moose")):
+              result=subprocess.run([str(binary.resolve())],input=wire,text=True,
+                                    capture_output=True,timeout=20,check=True)
+              replies=[json.loads(line) for line in result.stdout.splitlines() if line]
+              assert len(replies)==len(commands), (binary,result.stdout,result.stderr)
+              results.append(replies)
+          for before,after in zip(*results):
+              assert before==after, {"before":before,"after":after}
+          print("Baseline vendored vs official SOL SDK: 4 canonical protocol responses identical")
+          PY
+      - name: Create and verify deterministic native archive
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/adapter-package"
+          python3 scripts/package_adapter_candidate.py build --binary target/release/sol-adaptor-moose --output-dir "$output"
+          python3 scripts/package_adapter_candidate.py build --binary target/release/sol-adaptor-moose --output-dir "$RUNNER_TEMP/adapter-package-again"
+          cmp "$output/"*.tar.gz "$RUNNER_TEMP/adapter-package-again/"*.tar.gz
+          archive="$(find "$output" -name '*.tar.gz' -print -quit)"
+          python3 scripts/package_adapter_candidate.py verify --archive "$archive"
+          if command -v ldd >/dev/null 2>&1; then
+            ldd target/release/sol-adaptor-moose | tee "$output/binary-dynamic-dependencies.txt"
+          elif command -v otool >/dev/null 2>&1; then
+            otool -L target/release/sol-adaptor-moose | tee "$output/binary-dynamic-dependencies.txt"
+          else
+            printf 'Dynamic-link inspection tool unavailable\n' > "$output/binary-dynamic-dependencies.txt"
+          fi
+      - name: Test install, description, refusal, uninstall, tamper and data safety
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/adapter-package"
+          archive="$(find "$output" -name '*.tar.gz' -print -quit)"
+          prefix="$RUNNER_TEMP/adapter-test-prefix"
+          mkdir -p "$prefix/user-data"
+          printf 'DO_NOT_DELETE\n' > "$prefix/user-data/experiment.txt"
+          python3 scripts/package_adapter_candidate.py install --archive "$archive" --prefix "$prefix"
+          python3 scripts/package_adapter_candidate.py install --archive "$archive" --prefix "$prefix"
+          python3 - "$prefix" <<'PY'
+          import json, pathlib, subprocess, sys
+          prefix=pathlib.Path(sys.argv[1])
+          paths=list(prefix.glob("lib/sol-adapter-moose/versions/*/sol-adaptor-moose"))
+          assert len(paths)==1, paths
+          request={"jsonrpc":"2.0","id":1,"method":"describe_adapter"}
+          result=subprocess.run([str(paths[0])],input=json.dumps(request)+"\n",
+                               capture_output=True,text=True,check=True,timeout=15)
+          response=json.loads(result.stdout.strip())
+          assert response["id"]==1
+          info=response.get("result")
+          assert info and info.get("kind")=="protocol_success", response
+          payload=info["payload"]
+          assert payload["bootstrap"]["adapter_id"]=="sol.adapter.moose", response
+          versions=payload["bootstrap"]
+          assert versions["supported_adapter_protocol_versions"]==["0.1","0.2"]
+          assert versions["supported_public_contract_versions"]==["0.1","0.2"]
+          print("Installed binary describe_adapter v0.1/v0.2: PASS")
+          # Execute 0.3 is not advertised; never auto-promote an old Adapter.
+          invalid={"jsonrpc":"2.0","id":2,"method":"validate_plan",
+                   "params":{"adapter_protocol_version":"0.3"}}
+          rejected=subprocess.run([str(paths[0])],input=json.dumps(invalid)+"\n",
+                                  capture_output=True,text=True,check=True,timeout=15)
+          response=json.loads(rejected.stdout.strip())
+          assert response["id"]==2 and response["result"]["kind"]=="protocol_failure", response
+          print("Unsupported protocol 0.3 refused: PASS")
+          PY
+          cp "$archive" "$RUNNER_TEMP/changed.tar.gz"
+          cp "$archive.sha256" "$RUNNER_TEMP/changed.tar.gz.sha256"
+          python3 - "$RUNNER_TEMP/changed.tar.gz" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          data=bytearray(p.read_bytes())
+          data[48]^=1
+          p.write_bytes(data)
+          PY
+          if python3 scripts/package_adapter_candidate.py verify --archive "$RUNNER_TEMP/changed.tar.gz"; then
+            echo "Tampered archive accepted!" >&2
+            exit 1
+          fi
+          python3 scripts/package_adapter_candidate.py uninstall --prefix "$prefix" --version 0.1.0 --commit "$(git rev-parse HEAD)"
+          test -f "$prefix/user-data/experiment.txt"
+          test "$(cat "$prefix/user-data/experiment.txt")" = "DO_NOT_DELETE"
+          test -z "$(find "$prefix/lib/sol-adapter-moose/versions" -mindepth 1 -maxdepth 1 -print -quit)"
+          echo "Install/reinstall/tamper/uninstall/no user data deletion: PASS"
+      - name: Checkout immutable SOL Runtime 0.2 consumer
+        uses: actions/checkout@v4
+        with:
+          repository: HyungseonSong-plasma/simulation-ontology
+          ref: b6924e6556684eec9dd93677518821cc7adc84b6
+          path: .sol-runtime-pinned
+      - name: Prove local acceptance runner can install, inspect and uninstall candidate
+        run: |
+          python3 -m py_compile scripts/package_adapter_candidate.py scripts/local_adapter_acceptance.py
+          archive="$(find "$RUNNER_TEMP/adapter-package" -name '*.tar.gz' -print -quit)"
+          python3 scripts/local_adapter_acceptance.py --archive "$archive" --sol-checkout .sol-runtime-pinned --evidence-dir "$RUNNER_TEMP/local-acceptance-smoke"
+          python3 - "$RUNNER_TEMP/local-acceptance-smoke/local-acceptance.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1]))
+          assert x['installed_adapter_describe']=='PASS'
+          assert x['unsupported_protocol_03']=='PASS'
+          assert x['adapter_removed']=='PASS'
+          assert x['moose_backend']=='NOT_RUN'
+          print('Local acceptance runner no-MOOSE packaging smoke: PASS')
+          PY
+      - name: Upload candidate binary and proofs (NOT official release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: moose-adapter-unreleased-candidate-linux-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/adapter-package/*.tar.gz
+            ${{ runner.temp }}/adapter-package/*.sha256
+            ${{ runner.temp }}/adapter-package/binary-dynamic-dependencies.txt
+          if-no-files-found: error
+          retention-days: 30
