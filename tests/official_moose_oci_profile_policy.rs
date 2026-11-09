@@ -81,6 +81,9 @@ fn docker_command_has_exact_no_pull_no_network_literal_entrypoint_contract() {
     assert_eq!(args.last().unwrap(), "input.i");
     assert!(args.iter().any(|arg| arg == "/bin/bash"));
     assert!(args.iter().any(|arg| arg == "--entrypoint"));
-    assert!(args.iter().any(|arg| arg == "exec moose-opt \"$@\"") || args.iter().any(|arg| arg.contains("exec moose-opt \"$@\"")));
+    assert!(
+        args.iter().any(|arg| arg == "exec moose-opt \"$@\"")
+            || args.iter().any(|arg| arg.contains("exec moose-opt \"$@\""))
+    );
     assert!(!args.iter().any(|arg| arg.contains("moose:latest")));
 }
