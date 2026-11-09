@@ -17,7 +17,7 @@ EXPECTED_BUILD_SET_SHA256 = "6de33352a3830955f32cef42a37c4e022020a7b367fcb4c0dff
 EXPECTED_MOOSE_SHA256 = "d7b2eec6b958f11455c903b70a16ea319b7edb68b4499537313c06785abd05b3"
 EXPECTED_MOOSE = ("moose", "2026.08.12", "mpich", "linux-64", "moose-2026.08.12-mpich.conda")
 BUILD_FIELDS = ("name", "version", "build_string", "base_url", "platform")
-SHA256_RE = re.compile(r"[0-9a-f]{64}\\Z")
+SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 
 def digest_file(path):
