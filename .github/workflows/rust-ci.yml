@@ -265,9 +265,29 @@ jobs:
           PHYSICS_B1_SOURCE_ROOT: .parity/physics
         run: cargo test --test hit_b1_parity --locked -- --nocapture
 
+  conda-provisioning-deferred:
+    name: Exact Conda backend — DEFERRED (not a pass)
+    needs: [scope]
+    if: needs.scope.outputs.backend_needed == 'true' && vars.MOOSE_CONDA_CI_ENABLED != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record explicit pending Conda gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::notice title=MOOSE Conda gate deferred::Frozen moose=2026.08.12=mpich provisioning is NOT_EVALUATED; OCI success does not supersede it"
+          {
+            echo '### DEFERRED — exact Conda MOOSE backend'
+            echo 'Status: NOT_EVALUATED (INL distribution currently returns HTTP 502).'
+            echo 'This job records deferral only; it does not validate a MOOSE Conda binary.'
+            echo 'Re-enable by setting repository Actions variable MOOSE_CONDA_CI_ENABLED=true.'
+            echo 'Scientific and original package identity acceptance remain separate gates.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   moose-backend:
+    name: Exact Conda MOOSE — opt-in, infrastructure-blocked
     needs: [scope, rust]
-    if: needs.scope.outputs.backend_needed == 'true'
+    if: needs.scope.outputs.backend_needed == 'true' && vars.MOOSE_CONDA_CI_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
