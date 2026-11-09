@@ -383,3 +383,68 @@ jobs:
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/*.csv
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/stdout.log
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/stderr.log
+
+
+  # Research only: these are NOT the pinned MOOSE Conda identity.
+  physics-runtime-thermal-reuse-probe:
+    name: Probe Physics runtime with actual Adapter Thermal input
+    if: github.event_name == 'pull_request'
+    needs: [scope]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Attest immutable request/input source
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo '09e6690f11dc240792b1b922f1f5aba57aa38dea6bad10f4676c06b58dd0b3cd  experiments/physics_oci_reuse_probe/thermal_phase4.i' | sha256sum -c -
+      - name: Run actual Phase4 Thermal input using immutable Physics image
+        shell: bash
+        run: python3 experiments/physics_oci_reuse_probe/probe.py --image runtime --output target/physics-runtime-thermal-reuse
+      - name: Preserve raw read-only diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physics-runtime-thermal-reuse-probe
+          path: target/physics-runtime-thermal-reuse/
+          retention-days: 30
+          if-no-files-found: warn
+
+  physics-buildbase-thermal-reuse-probe:
+    name: Inspect Physics build base for Thermal capability
+    if: github.event_name == 'pull_request'
+    needs: [scope]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Attest immutable analysis source
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Inspect pinned Physics build-base without rebuilding or altering it
+        shell: bash
+        run: python3 experiments/physics_oci_reuse_probe/probe.py --image base --output target/physics-buildbase-thermal-reuse
+      - name: Preserve immutable OCI build-base inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physics-buildbase-thermal-reuse-probe
+          path: target/physics-buildbase-thermal-reuse/
+          retention-days: 30
+          if-no-files-found: warn
