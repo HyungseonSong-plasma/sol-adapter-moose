@@ -69,10 +69,14 @@ fn actual_pinned_physics_oci_thermal_runs_with_adapter_owned_realization() {
     assert!(input.contains("type = HeatConduction"));
     assert!(input.contains("prop_values = '45'"));
     assert!(input.contains("value = 400"));
-    let check = fs::read_to_string(dir.join("check.stdout.log")).unwrap();
+    let check = format!(
+        "{}\n{}",
+        fs::read_to_string(dir.join("check.stdout.log")).unwrap(),
+        fs::read_to_string(dir.join("check.stderr.log")).unwrap()
+    );
     assert!(
         check.contains("Syntax OK"),
-        "native P2 must report Syntax OK: {check}"
+        "native P2 must report Syntax OK on stdout or stderr: {check}"
     );
     let stdout = fs::read_to_string(dir.join("stdout.log")).unwrap();
     assert!(
