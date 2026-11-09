@@ -211,6 +211,45 @@ fn default_oci_without_launcher_preserves_describe_and_fails_closed_on_execute()
 }
 
 #[test]
+fn explicit_conda_selection_does_not_fall_through_to_oci() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/oci-conda-explicit");
+    let _ = fs::remove_dir_all(&root);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_sol-adaptor-moose"));
+    command
+        .env("SOL_MOOSE_BACKEND", "conda")
+        .env_remove("SOL_MOOSE_EXECUTABLE")
+        .env_remove("SOL_MOOSE_CONDA_PREFIX")
+        .env("SOL_MOOSE_OCI_EXECUTABLE", "/usr/bin/false")
+        .env("SOL_MOOSE_WORKSPACE_ROOT", &root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    child.stdin.as_mut().unwrap().write_all(
+        rpc("execute_plan", serde_json::from_str(REQUEST).unwrap(), 101).as_bytes()
+    ).unwrap();
+    drop(child.stdin.take());
+    let frames = parse(child.wait_with_output().unwrap());
+    assert_eq!(frames.len(), 1);
+    assert_eq!(payload(&frames[0])["execution"], "unavailable");
+    assert!(!root.exists());
+}
+
+#[test]
+fn unrecognized_backend_setting_rejected_before_json_rpc_dispatch() {
+    let output = Command::new(env!("CARGO_BIN_EXE_sol-adaptor-moose"))
+        .env("SOL_MOOSE_BACKEND", "automatic")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("expected oci or conda"));
+}
+
+#[test]
 fn external_oci_rejects_failed_probe_without_workspace_creation() {
     let Some(_) = std::env::var_os("SOL_MOOSE_OCI_EXECUTABLE") else {
         return;
