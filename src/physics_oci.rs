@@ -5,6 +5,7 @@
 
 use crate::backend::BackendError;
 use serde_json::Value;
+use std::fmt::Write as _;
 use std::fs;
 use std::io::{ErrorKind, Read};
 #[cfg(unix)]
@@ -220,7 +221,11 @@ impl OciContainerLease {
                         context: "get kernel randomness for private OCI container".to_owned(),
                         detail: e.to_string(),
                     })?;
-                let nonce: String = random.iter().map(|b| format!("{b:02x}")).collect();
+                let mut nonce = String::with_capacity(32);
+                for byte in random {
+                    write!(&mut nonce, "{byte:02x}")
+                        .expect("formatting a random byte into a String cannot fail");
+                }
                 let container_name = format!("{OCI_CONTAINER_PREFIX}{nonce}");
                 let dir = std::env::temp_dir().join(&container_name);
                 let result = fs::DirBuilder::new().mode(0o700).create(&dir);
