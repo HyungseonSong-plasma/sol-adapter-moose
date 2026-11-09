@@ -30,7 +30,7 @@
     },
     {
       "name": "repository-mutation",
-      "load_on": ["MUTATE", "GITHUB_BRANCH_DELETE", "GITHUB_MUTATION_CAPABILITY_VERDICT"],
+      "load_on": ["MUTATE","GITHUB_BRANCH_DELETE","GITHUB_MUTATION_CAPABILITY_VERDICT","GITHUB_FILE_CREATE","GITHUB_FILE_UPDATE","GITHUB_BRANCH_CREATE"],
       "revision": "059050330a549fce0b543687e2e9d4dca6c3f624",
       "path": "skills/repository-mutation/README.md",
       "expected_blob_sha": "a4054584591d8cbbb22891c5d6e870834d2d0264"
