@@ -19,7 +19,7 @@ import sys
 
 SOURCE = Path(__file__).with_name("thermal_phase4.i")
 SOURCE_SHA256 = "09e6690f11dc240792b1b922f1f5aba57aa38dea6bad10f4676c06b58dd0b3cd"
-IMAGE_TAG = "idaholab/moose:latest"
+IMAGE_TAG = "idaholab/moose@sha256:47fc6c5bff5e86869e7c467f999e9585ece13af9ffd1f580fef5369728a93452"
 DIGEST_PATTERN = re.compile(r"idaholab/moose@sha256:[0-9a-f]{64}")
 
 
@@ -32,9 +32,9 @@ class Probe:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.report = {
-            "schema": "adapter.official-moose-oci-candidate.v0.1",
+            "schema": "adapter.official-moose-oci-candidate.v0.2",
             "classification": "NON_ACCEPTING_ALTERNATIVE_CANDIDATE",
-            "source_tag": IMAGE_TAG,
+            "requested_immutable_image": IMAGE_TAG,
             "frozen_conda_target": "moose=2026.08.12=mpich (linux-64)",
             "conda_identity_parity": "NOT_EVALUATED",
             "sol_protocol_parity": "NOT_EVALUATED",
