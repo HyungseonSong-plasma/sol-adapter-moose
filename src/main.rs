@@ -8,8 +8,11 @@ use sol_adapter_transport::{
 };
 use sol_adaptor_moose::execution_v02::ExecutionEnvironment;
 use sol_adaptor_moose::FoundationAdapter;
+use std::env;
 use std::io::{self, Read, Write};
+use std::path::PathBuf;
 use std::process;
+use std::time::Duration;
 
 fn main() {
     if let Err(error) = run() {
@@ -20,7 +23,31 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let adapter = FoundationAdapter;
-    let execution = ExecutionEnvironment::from_environment();
+    // Explicit research-only external-consumer selection. The default stays
+    // the exact Conda Phase 1 profile, with no implicit fallback to OCI.
+    let execution = if let Some(image) = env::var_os("SOL_MOOSE_OCI_CANDIDATE_IMAGE") {
+        let image = image
+            .into_string()
+            .map_err(|_| "experimental OCI image is not UTF-8".to_owned())?;
+        let pin = env::var("MOOSE_DOCKER_PIN")
+            .map_err(|_| "explicit OCI mode requires MOOSE_DOCKER_PIN".to_owned())?;
+        if pin != image {
+            return Err("OCI candidate image and invoked Docker pin disagree".to_owned());
+        }
+        let executable = env::var_os("SOL_MOOSE_OCI_EXECUTABLE")
+            .ok_or("explicit OCI mode requires SOL_MOOSE_OCI_EXECUTABLE")?;
+        let workspace = env::var_os("SOL_MOOSE_WORKSPACE_ROOT")
+            .ok_or("explicit OCI mode requires SOL_MOOSE_WORKSPACE_ROOT")?;
+        ExecutionEnvironment::configured_official_oci_candidate(
+            PathBuf::from(executable),
+            PathBuf::from(workspace),
+            Duration::from_secs(120),
+            &image,
+        )
+        .map_err(|error| format!("experimental OCI identity rejected: {error}"))?
+    } else {
+        ExecutionEnvironment::from_environment()
+    };
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut input = stdin.lock();
