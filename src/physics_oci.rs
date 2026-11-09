@@ -145,9 +145,9 @@ pub(crate) fn docker_base_command(
                 "OCI workspace mount is not a directory".to_owned(),
             ));
         }
-        let path = real.to_str().ok_or_else(|| {
-            BackendError::Process("OCI workspace path is not UTF-8".to_owned())
-        })?;
+        let path = real
+            .to_str()
+            .ok_or_else(|| BackendError::Process("OCI workspace path is not UTF-8".to_owned()))?;
         if path.contains(',') || path.contains(':') || path.contains('\n') {
             return Err(BackendError::Process(
                 "OCI workspace path contains an unsupported mount character".to_owned(),
