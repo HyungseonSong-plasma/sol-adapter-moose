@@ -265,6 +265,121 @@ jobs:
           PHYSICS_B1_SOURCE_ROOT: .parity/physics
         run: cargo test --test hit_b1_parity --locked -- --nocapture
 
+  # Separate opt-in backend profile, independent of INL Conda provisioning.
+  # The existing exact-Conda moose-backend gate below is NOT replaced.
+  physics-oci-thermal:
+    name: Physics OCI native Thermal + pinned SOL Runtime parity
+    needs: [scope, rust]
+    if: needs.scope.outputs.backend_needed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      SOL_MOOSE_BACKEND_PROFILE: physics_oci_thermal_v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact candidate commit
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.80.0
+      - name: Pull exact published Physics Runtime (not INL Conda)
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='ghcr.io/hyungseonsong-plasma/physics-runtime@sha256:cda9f0d09a17aed5fa606e97d1ee5c3450f7280536cec2e5c635402bb07d972c'
+          docker pull "$image"
+          test "$(docker image inspect "$image" --format '{{ index .Config.Labels "io.physics.moose.sha" }}')" = '9f388366ccf38b9c34542ec5561198249fde0ac9'
+          test "$(docker image inspect "$image" --format '{{ index .Config.Labels "io.physics.build-base.ref" }}')" = 'ghcr.io/hyungseonsong-plasma/physics-build-base@sha256:2c3352da4f5c1b2ae98475fc01463ad0cdbc6ce7d221ce55055ddea152182008'
+      - name: Execute real Adapter OCI Thermal P2/P3 (direct path)
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
+          export SOL_MOOSE_WORKSPACE_ROOT="$PWD/target/physics-oci-native"
+          cargo test --test physics_oci_native --locked -- --nocapture
+          test -s target/physics-oci-evidence/direct-result.json
+          test -s target/physics-oci-native/runs/direct-thermal-oci-001/input.i
+          grep -Fq 'Solve Converged!' target/physics-oci-native/runs/direct-thermal-oci-001/stdout.log
+      - uses: actions/checkout@v4
+        with:
+          repository: HyungseonSong-plasma/simulation-ontology
+          ref: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          path: .sol-v02-runtime
+          persist-credentials: false
+      - name: Run actual pinned SOL Runtime -> Adapter -> Physics OCI P2/P3
+        shell: bash
+        env:
+          SOL_SHA: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          unset SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
+          test "$(git -C .sol-v02-runtime rev-parse HEAD)" = "$SOL_SHA"
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          cargo build --locked --bin sol-adaptor-moose
+          cargo build --locked --manifest-path .sol-v02-runtime/examples/external-runtime-v02/Cargo.toml
+          mkdir -p target/physics-oci-sol-consumer
+          jq -n --slurpfile plan tests/fixtures/sol/0.2/thermal-realization-request.json \
+            '{target:"moose",required_capabilities:["thermal.steady_conduction"],plan_request:$plan[0]}' \
+            > target/physics-oci-sol-consumer/request.json
+          consumer="$PWD/.sol-v02-runtime/examples/external-runtime-v02/target/debug/sol-external-runtime-v02-consumer"
+          adapter="$PWD/target/debug/sol-adaptor-moose"
+          export SOL_MOOSE_WORKSPACE_ROOT="$PWD/target/physics-oci-sol-workspace"
+          "$consumer" run "$adapter" target/physics-oci-sol-consumer/request.json \
+            > target/physics-oci-sol-consumer/result.json \
+            2> target/physics-oci-sol-consumer/stderr.log
+          python3 scripts/verify_physics_oci_sol_thermal_parity.py \
+            --external-result target/physics-oci-sol-consumer/result.json \
+            --external-workspace target/physics-oci-sol-workspace \
+            --direct-input target/physics-oci-native/runs/direct-thermal-oci-001/input.i \
+            --request target/physics-oci-sol-consumer/request.json \
+            --adapter-sha "$HEAD_SHA" --runtime-sha "$SOL_SHA" \
+            --output target/physics-oci-sol-consumer/parity.json
+      - name: Negative mutation must not pass parity
+        shell: bash
+        env:
+          SOL_SHA: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          cp target/physics-oci-native/runs/direct-thermal-oci-001/input.i target/physics-oci-sol-consumer/tampered.i
+          printf '\n# deliberate mismatch\n' >> target/physics-oci-sol-consumer/tampered.i
+          if python3 scripts/verify_physics_oci_sol_thermal_parity.py \
+            --external-result target/physics-oci-sol-consumer/result.json \
+            --external-workspace target/physics-oci-sol-workspace \
+            --direct-input target/physics-oci-sol-consumer/tampered.i \
+            --request target/physics-oci-sol-consumer/request.json \
+            --adapter-sha "$HEAD_SHA" --runtime-sha "$SOL_SHA" \
+            --output target/physics-oci-sol-consumer/should-not-exist.json \
+            > target/physics-oci-sol-consumer/negative.log 2>&1; then
+            echo 'INVALID_PARITY_UNEXPECTED_PASS' >&2
+            exit 1
+          fi
+          grep -Fq 'different HIT bytes' target/physics-oci-sol-consumer/negative.log
+          test ! -e target/physics-oci-sol-consumer/should-not-exist.json
+          echo 'OCI_PARITY_NEGATIVE_REJECTED'
+      - name: Persist exact-backend execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physics-oci-thermal-native-parity-evidence
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            target/physics-oci-evidence/*.json
+            target/physics-oci-native/runs/*/input.i
+            target/physics-oci-native/runs/*/*.log
+            target/physics-oci-sol-consumer/*
+            target/physics-oci-sol-workspace/runs/*/input.i
+            target/physics-oci-sol-workspace/runs/*/*.log
   moose-backend:
     needs: [scope, rust]
     if: needs.scope.outputs.backend_needed == 'true'
