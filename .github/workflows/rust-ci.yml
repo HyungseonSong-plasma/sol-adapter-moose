@@ -269,6 +269,62 @@ jobs:
           PHYSICS_B1_SOURCE_ROOT: .parity/physics
         run: cargo test --test hit_b1_parity --locked -- --nocapture
 
+  inl-direct-get-diagnostic:
+    needs: scope
+    if: needs.scope.outputs.backend_needed == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify bounded GET of exact small INL archive and ranged MOOSE
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/inl-get
+          base='https://conda.software.inl.gov/public/linux-64'
+          small='moose-tools-2026.06.16-py314h843be8b_0.conda'
+          expected='667dd8ed6d2e32f1925258e157368169047f7a9953b83fd1927b60b88c7d9a9b'
+          small_status='not_attempted'
+          range_status='not_attempted'
+          if curl -fsSL --max-time 20 --retry 0 --max-filesize 20000 \
+                -D target/inl-get/small.headers -o target/inl-get/small.conda \
+                "$base/$small"; then
+            if echo "$expected  target/inl-get/small.conda" | sha256sum -c -; then
+              small_status='sha256_verified'
+            else
+              small_status='checksum_mismatch'
+            fi
+          else
+            small_status='get_failed'
+          fi
+          if curl -fsSL --max-time 20 --retry 0 --range 0-0 \
+                --max-filesize 1024 \
+                -D target/inl-get/ranged.headers \
+                -o target/inl-get/ranged.body \
+                "$base/moose-2026.08.12-mpich.conda"; then
+            if grep -Eiq '^HTTP/[^ ]+ 206' target/inl-get/ranged.headers && \
+                [[ "$(wc -c < target/inl-get/ranged.body)" -eq 1 ]]; then
+              range_status='partial_206'
+            else
+              range_status='inconclusive_response'
+            fi
+          else
+            range_status='get_failed'
+          fi
+          printf 'small_archive=%s\nlarge_range=%s\n' "$small_status" "$range_status" \
+            | tee target/inl-get/verdict.txt
+          if [[ "$small_status" != 'sha256_verified' || "$range_status" != 'partial_206' ]]; then
+            echo 'Direct ranged GET delivery not proven, no explicit install fallback allowed' >&2
+            exit 1
+          fi
+      - name: Retain bounded GET diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inl-bounded-get-diagnostic
+          if-no-files-found: warn
+          path: |
+            target/inl-get/verdict.txt
+            target/inl-get/*.headers
+
   moose-backend:
     needs: [scope, rust]
     if: needs.scope.outputs.backend_needed == 'true'
