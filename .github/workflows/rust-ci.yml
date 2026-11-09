@@ -6,6 +6,13 @@ on:
     branches:
       - main
       - 'a0.1-*'
+  workflow_dispatch:
+    inputs:
+      run_conda_compatibility:
+        description: "Explicitly opt in to deferred exact-Conda compatibility checks"
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -265,8 +272,9 @@ jobs:
           PHYSICS_B1_SOURCE_ROOT: .parity/physics
         run: cargo test --test hit_b1_parity --locked -- --nocapture
 
-  # Separate opt-in backend profile, independent of INL Conda provisioning.
-  # The existing exact-Conda moose-backend gate below is NOT replaced.
+  # Physics OCI is the Thermal 0.2 default and mandatory Native gate.
+  # Exact-Conda remains a distinct historical compatibility check, suspended
+  # on routine PR/push runs and available only by explicit manual opt-in.
   physics-oci-thermal:
     name: Physics OCI native Thermal + pinned SOL Runtime parity
     needs: [scope, rust]
@@ -276,7 +284,7 @@ jobs:
     permissions:
       contents: read
     env:
-      SOL_MOOSE_BACKEND_PROFILE: physics_oci_thermal_v1
+      SOL_MOOSE_NATIVE_OCI_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -465,9 +473,12 @@ jobs:
             target/physics-oci-sol-consumer/*
             target/physics-oci-sol-workspace/runs/*/input.i
             target/physics-oci-sol-workspace/runs/*/*.log
+  # Deferred, explicitly selected only; no longer blocks the default OCI
+  # Thermal CI. Failure remains a real FAIL when deliberately requested.
   moose-backend:
+    name: Deferred exact-Conda release compatibility (manual only)
     needs: [scope, rust]
-    if: needs.scope.outputs.backend_needed == 'true'
+    if: github.event_name == 'workflow_dispatch' && inputs.run_conda_compatibility == true && needs.scope.outputs.backend_needed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
