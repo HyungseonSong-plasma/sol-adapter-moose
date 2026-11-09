@@ -480,6 +480,8 @@ jobs:
     needs: [scope, rust]
     if: github.event_name == 'workflow_dispatch' && inputs.run_conda_compatibility == true && needs.scope.outputs.backend_needed == 'true'
     runs-on: ubuntu-latest
+    env:
+      SOL_MOOSE_BACKEND_PROFILE: conda
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
