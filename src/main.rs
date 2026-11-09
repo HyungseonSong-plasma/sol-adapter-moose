@@ -57,11 +57,8 @@ fn run() -> Result<(), String> {
                     )
                     .map_err(|error| format!("experimental OCI identity rejected: {error}"))?
                 }
-                None => ExecutionEnvironment::unavailable_official_oci_candidate(
-                    workspace,
-                    &image,
-                )
-                .map_err(|error| format!("experimental OCI identity rejected: {error}"))?,
+                None => ExecutionEnvironment::unavailable_official_oci_candidate(workspace, &image)
+                    .map_err(|error| format!("experimental OCI identity rejected: {error}"))?,
             }
         }
         "conda" => ExecutionEnvironment::from_environment(),
