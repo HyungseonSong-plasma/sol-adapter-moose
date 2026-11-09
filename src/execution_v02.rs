@@ -3,8 +3,8 @@ use crate::backend::{
     PHASE1_MOOSE_PACKAGE_FILENAME,
 };
 use crate::hit::validate_generated_structure;
-use crate::oci_profile::OfficialOciProfile;
 use crate::ir::MooseOperator;
+use crate::oci_profile::OfficialOciProfile;
 use crate::realization_v02::translate_steady_thermal_v02;
 use sol_adapter_protocol::{
     protocol_diagnostic, ActionExecutionReport, ActionExecutionState,
@@ -587,14 +587,12 @@ fn completed_execution_response(
         .flat_map(|report| report.effects.iter().cloned())
         .collect::<Vec<_>>();
     let (backend_namespace, backend_reference) = match backend_identity {
-        BackendIdentity::ExactCondaPhase1 => (
-            "moose.package",
-            PHASE1_MOOSE_PACKAGE_FILENAME.to_owned(),
-        ),
-        BackendIdentity::OfficialOciCandidate(profile) => (
-            "moose.oci.image",
-            profile.image().to_owned(),
-        ),
+        BackendIdentity::ExactCondaPhase1 => {
+            ("moose.package", PHASE1_MOOSE_PACKAGE_FILENAME.to_owned())
+        }
+        BackendIdentity::OfficialOciCandidate(profile) => {
+            ("moose.oci.image", profile.image().to_owned())
+        }
     };
     let provenance = ExecutionProvenance {
         producer: "sol.adapter.moose".to_owned(),
