@@ -69,8 +69,13 @@ def evaluate(
         for filename in ("check.stdout.log", "check.stderr.log", "stdout.log", "stderr.log"):
             if not (dirname / filename).is_file():
                 raise ValueError(f"missing real OCI runtime evidence: {filename}")
-    if "Syntax OK" not in (external_input.parent / "check.stdout.log").read_text():
-        raise ValueError("external P2 was not observed")
+    check_text = (
+        (external_input.parent / "check.stdout.log").read_text()
+        + "\n"
+        + (external_input.parent / "check.stderr.log").read_text()
+    )
+    if "Syntax OK" not in check_text:
+        raise ValueError("external P2 was not observed in stdout or stderr")
     if "Solve Converged!" not in (external_input.parent / "stdout.log").read_text():
         raise ValueError("external P3 was not observed")
     return {
