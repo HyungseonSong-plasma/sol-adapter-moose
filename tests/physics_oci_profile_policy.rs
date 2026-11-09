@@ -6,17 +6,20 @@ use std::process::{Command, Stdio};
 
 const REQUEST: &str = include_str!("fixtures/sol/0.2/thermal-realization-request.json");
 
-fn preflight_with_profile(profile: &str, conflicting_executable: Option<&str>) -> Value {
+fn preflight_with_profile(profile: Option<&str>, conflicting_executable: Option<&str>) -> Value {
     let request: Value = serde_json::from_str(REQUEST).unwrap();
     let mut command = Command::new(env!("CARGO_BIN_EXE_sol-adaptor-moose"));
     command
-        .env("SOL_MOOSE_BACKEND_PROFILE", profile)
+        .env_remove("SOL_MOOSE_BACKEND_PROFILE")
         .env_remove("SOL_MOOSE_CONDA_PREFIX")
         .env_remove("SOL_MOOSE_EXECUTABLE")
         .env_remove("SOL_MOOSE_WORKSPACE_ROOT")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(profile) = profile {
+        command.env("SOL_MOOSE_BACKEND_PROFILE", profile);
+    }
     if let Some(executable) = conflicting_executable {
         command.env("SOL_MOOSE_EXECUTABLE", executable);
     }
@@ -40,18 +43,37 @@ fn preflight_with_profile(profile: &str, conflicting_executable: Option<&str>) -
 
 #[test]
 fn unknown_or_conflicting_backend_profile_rejects_before_execution() {
-    let wrong = preflight_with_profile("unrecognised_backend", None);
+    let wrong = preflight_with_profile(Some("unrecognised_backend"), None);
     assert_eq!(wrong["result"]["kind"], "protocol_success");
     assert_eq!(wrong["result"]["payload"]["preflight"], "rejected");
     assert_eq!(wrong["result"]["payload"]["target_compatible"], false);
 
     let mixed = preflight_with_profile(
-        "physics_oci_thermal_v1",
+        Some("physics_oci_thermal_v1"),
         Some("/tmp/fake-conda/bin/moose-opt"),
     );
     assert_eq!(mixed["result"]["kind"], "protocol_success");
     assert_eq!(mixed["result"]["payload"]["preflight"], "rejected");
     assert_eq!(mixed["result"]["payload"]["target_compatible"], false);
+
+    // With no profile override, legacy Conda variables must fail closed,
+    // rather than silently re-selecting the historical executable.
+    let default_mixed = preflight_with_profile(None, Some("/tmp/fake-conda/bin/moose-opt"));
+    assert_eq!(default_mixed["result"]["kind"], "protocol_success");
+    assert_eq!(default_mixed["result"]["payload"]["preflight"], "rejected");
+    assert_eq!(
+        default_mixed["result"]["payload"]["target_compatible"],
+        false
+    );
+
+    // The historical Conda backend remains explicitly selectable, but a
+    // missing executable must still fail without attempting an OCI fallback.
+    let conda_no_executable = preflight_with_profile(Some("conda"), None);
+    assert_eq!(conda_no_executable["result"]["kind"], "protocol_success");
+    assert_eq!(
+        conda_no_executable["result"]["payload"]["preflight"],
+        "rejected"
+    );
 }
 
 #[test]
