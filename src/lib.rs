@@ -4,6 +4,7 @@ pub mod backend;
 pub mod execution_v02;
 pub mod hit;
 pub mod ir;
+pub mod oci_profile;
 pub mod realization_v02;
 
 use crate::execution_v02::{MOOSE_TARGET, THERMAL_CAPABILITY_V02};

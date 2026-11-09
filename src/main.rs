@@ -7,9 +7,13 @@ use sol_adapter_transport::{
     TransportRequest,
 };
 use sol_adaptor_moose::execution_v02::ExecutionEnvironment;
+use sol_adaptor_moose::oci_profile::APPROVED_CANDIDATE_IMAGE;
 use sol_adaptor_moose::FoundationAdapter;
+use std::env;
 use std::io::{self, Read, Write};
+use std::path::PathBuf;
 use std::process;
+use std::time::Duration;
 
 fn main() {
     if let Err(error) = run() {
@@ -20,7 +24,50 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let adapter = FoundationAdapter;
-    let execution = ExecutionEnvironment::from_environment();
+    // Consumer-owned backend selection, default OCI, no implicit Conda fallback.
+    // A missing OCI launcher returns an unavailable backend, rather than
+    // substituting an unverified executable or failing the describe operation.
+    let backend = env::var("SOL_MOOSE_BACKEND").unwrap_or_else(|_| "oci".to_owned());
+    let execution = match backend.as_str() {
+        "oci" => {
+            let image = env::var("SOL_MOOSE_OCI_CANDIDATE_IMAGE")
+                .unwrap_or_else(|_| APPROVED_CANDIDATE_IMAGE.to_owned());
+            if image != APPROVED_CANDIDATE_IMAGE {
+                return Err("unsupported OCI image digest (must use pinned candidate)".to_owned());
+            }
+            let workspace = env::var_os("SOL_MOOSE_WORKSPACE_ROOT")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| env::temp_dir().join("sol-adaptor-moose-runtime"));
+            match env::var_os("SOL_MOOSE_OCI_EXECUTABLE") {
+                Some(executable) => {
+                    // The existing candidate launcher requires this pin. This
+                    // check is configuration consistency, not executable custody.
+                    let pin = env::var("MOOSE_DOCKER_PIN")
+                        .map_err(|_| "OCI executable requires MOOSE_DOCKER_PIN".to_owned())?;
+                    if pin != image {
+                        return Err(
+                            "OCI candidate image and invoked Docker pin disagree".to_owned()
+                        );
+                    }
+                    ExecutionEnvironment::configured_official_oci_candidate(
+                        PathBuf::from(executable),
+                        &workspace,
+                        Duration::from_secs(120),
+                        &image,
+                    )
+                    .map_err(|error| format!("experimental OCI identity rejected: {error}"))?
+                }
+                None => ExecutionEnvironment::unavailable_official_oci_candidate(workspace, &image)
+                    .map_err(|error| format!("experimental OCI identity rejected: {error}"))?,
+            }
+        }
+        "conda" => ExecutionEnvironment::from_environment(),
+        other => {
+            return Err(format!(
+                "unsupported SOL_MOOSE_BACKEND={other:?}; expected oci or conda"
+            ))
+        }
+    };
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut input = stdin.lock();

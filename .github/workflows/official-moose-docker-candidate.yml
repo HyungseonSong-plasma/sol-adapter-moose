@@ -1,0 +1,88 @@
+name: Official MOOSE Docker candidate (non-accepting)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  official-moose-docker-candidate:
+    name: Discover official image digest and run genuine Thermal input
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify exact PR source revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Probe official MOOSE OCI by resolved immutable digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 experiments/official_moose_docker_probe/probe.py \
+            --output target/official-moose-docker-candidate
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.80.0
+      - name: Exercise actual Adapter IR, workspace, Thermal and Phase 5 V&V tests through OCI
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$(cat target/official-moose-docker-candidate/resolved-image.txt)"
+          test "$image" = 'idaholab/moose@sha256:47fc6c5bff5e86869e7c467f999e9585ece13af9ffd1f580fef5369728a93452'
+          install -m 0755 experiments/official_moose_docker_probe/moose_wrapper.sh \
+            "$RUNNER_TEMP/moose-docker-opt"
+          export SOL_MOOSE_EXECUTABLE="$RUNNER_TEMP/moose-docker-opt"
+          export MOOSE_DOCKER_PIN="$image"
+          mkdir -p target/official-moose-docker-candidate/rust
+          cargo test --locked --test moose_ir_check -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/moose-ir-check.log
+          cargo test --locked --test moose_realization_v02_check -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/moose-realization-v02-check.log
+          cargo test --locked --test moose_backend_workspace -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/moose-backend-workspace.log
+          cargo test --locked --test phase5_thermal_vv -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/phase5-thermal-vv.log
+          # Separate explicit OCI adapter protocol lane. The legacy exact
+          # Conda Protocol test remains untouched and is not counted as PASS.
+          export SOL_MOOSE_OCI_EXECUTABLE="$SOL_MOOSE_EXECUTABLE"
+          cargo test --locked --test moose_execution_oci_candidate -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/moose-protocol-oci.log
+          # Real separately spawned Adapter JSON-RPC process, two independent
+          # execute calls, replay-artifact isolation and fail-closed probes.
+          cargo test --locked --test oci_external_transport -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/oci-external-transport.log
+          test -f target/phase5-vv-evidence/thermal-vv.json
+          cp target/phase5-vv-evidence/thermal-vv.json \
+            target/official-moose-docker-candidate/rust/thermal-vv.json
+      - name: Check analytic Thermal gradient on three meshes and altered boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 experiments/official_moose_docker_probe/gradient_vv.py \
+            | tee target/official-moose-docker-candidate/gradient-verdict.log
+      - name: Preserve immutable digest, native CLI and numeric test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-moose-docker-candidate
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            target/official-moose-docker-candidate/report.json
+            target/official-moose-docker-candidate/resolved-image.txt
+            target/official-moose-docker-candidate/*.log
+            target/official-moose-docker-candidate/case/*.i
+            target/official-moose-docker-candidate/case/*.csv
+            target/official-moose-docker-candidate/rust/*
+            target/phase5-vv-evidence/runs/thermal-constant-field-vv/*.csv
+            target/official-moose-docker-candidate/gradient/**
+            target/oci-external-transport-evidence/external-protocol-report.json

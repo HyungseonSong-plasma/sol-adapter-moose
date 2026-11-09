@@ -4,6 +4,7 @@ use crate::backend::{
 };
 use crate::hit::validate_generated_structure;
 use crate::ir::MooseOperator;
+use crate::oci_profile::OfficialOciProfile;
 use crate::realization_v02::translate_steady_thermal_v02;
 use sol_adapter_protocol::{
     protocol_diagnostic, ActionExecutionReport, ActionExecutionState,
@@ -33,6 +34,13 @@ static RUN_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub struct ExecutionEnvironment {
     runner: Option<MooseProcessRunner>,
     workspace_root: PathBuf,
+    backend_identity: BackendIdentity,
+}
+
+#[derive(Debug, Clone)]
+enum BackendIdentity {
+    ExactCondaPhase1,
+    OfficialOciCandidate(OfficialOciProfile),
 }
 
 impl ExecutionEnvironment {
@@ -45,6 +53,7 @@ impl ExecutionEnvironment {
         Self {
             runner,
             workspace_root,
+            backend_identity: BackendIdentity::ExactCondaPhase1,
         }
     }
 
@@ -56,14 +65,46 @@ impl ExecutionEnvironment {
         Self {
             runner: Some(MooseProcessRunner::new(executable, timeout)),
             workspace_root: workspace_root.into(),
+            backend_identity: BackendIdentity::ExactCondaPhase1,
         }
+    }
+
+    /// Explicitly selected, non-default official OCI research profile.
+    /// Identity is not inferred from or rebranded as a Conda archive.
+    pub fn configured_official_oci_candidate(
+        executable: impl Into<PathBuf>,
+        workspace_root: impl Into<PathBuf>,
+        timeout: Duration,
+        image: &str,
+    ) -> Result<Self, String> {
+        let profile = OfficialOciProfile::candidate(image)?;
+        Ok(Self {
+            runner: Some(MooseProcessRunner::new(executable, timeout)),
+            workspace_root: workspace_root.into(),
+            backend_identity: BackendIdentity::OfficialOciCandidate(profile),
+        })
     }
 
     pub fn unavailable(workspace_root: impl Into<PathBuf>) -> Self {
         Self {
             runner: None,
             workspace_root: workspace_root.into(),
+            backend_identity: BackendIdentity::ExactCondaPhase1,
         }
+    }
+
+    /// OCI is selected but no executable is configured; retain OCI identity
+    /// while returning the protocol's truthful unavailable result.
+    pub fn unavailable_official_oci_candidate(
+        workspace_root: impl Into<PathBuf>,
+        image: &str,
+    ) -> Result<Self, String> {
+        let profile = OfficialOciProfile::candidate(image)?;
+        Ok(Self {
+            runner: None,
+            workspace_root: workspace_root.into(),
+            backend_identity: BackendIdentity::OfficialOciCandidate(profile),
+        })
     }
 
     pub fn workspace_root(&self) -> &Path {
@@ -352,23 +393,33 @@ impl ExecutionEnvironment {
             )));
         }
 
-        completed_execution_response(request, runner, &layout, run_key)
+        completed_execution_response(request, runner, &layout, run_key, &self.backend_identity)
     }
 
     fn backend_readiness(&self) -> BackendReadiness {
         let Some(runner) = self.runner.as_ref() else {
-            return BackendReadiness::Unavailable(
-                "SOL_MOOSE_EXECUTABLE is not configured for the current adapter process".to_owned(),
-            );
-        };
-        let Some(prefix) = runner.inferred_conda_prefix() else {
-            return BackendReadiness::Incompatible(format!(
-                "exact MOOSE package identity cannot be inferred from executable `{}`",
-                runner.executable().display()
+            let selected_executable = match &self.backend_identity {
+                BackendIdentity::ExactCondaPhase1 => "SOL_MOOSE_EXECUTABLE",
+                BackendIdentity::OfficialOciCandidate(_) => "SOL_MOOSE_OCI_EXECUTABLE",
+            };
+            return BackendReadiness::Unavailable(format!(
+                "{selected_executable} is not configured for the current adapter process"
             ));
         };
-        match probe_exact_phase1_target(runner, &prefix) {
-            Ok(_) => BackendReadiness::Ready,
+        let result = match &self.backend_identity {
+            BackendIdentity::ExactCondaPhase1 => {
+                let Some(prefix) = runner.inferred_conda_prefix() else {
+                    return BackendReadiness::Incompatible(format!(
+                        "exact MOOSE package identity cannot be inferred from executable `{}`",
+                        runner.executable().display()
+                    ));
+                };
+                probe_exact_phase1_target(runner, &prefix).map(|_| ())
+            }
+            BackendIdentity::OfficialOciCandidate(profile) => profile.probe(runner),
+        };
+        match result {
+            Ok(()) => BackendReadiness::Ready,
             Err(error) => classify_backend_error(error),
         }
     }
@@ -530,6 +581,7 @@ fn completed_execution_response(
     runner: &MooseProcessRunner,
     layout: &WorkspaceLayout,
     run_key: &str,
+    backend_identity: &BackendIdentity,
 ) -> Result<ExecutePlanResponseV02, ProtocolFailure> {
     let order = request
         .plan
@@ -552,6 +604,14 @@ fn completed_execution_response(
         .iter()
         .flat_map(|report| report.effects.iter().cloned())
         .collect::<Vec<_>>();
+    let (backend_namespace, backend_reference) = match backend_identity {
+        BackendIdentity::ExactCondaPhase1 => {
+            ("moose.package", PHASE1_MOOSE_PACKAGE_FILENAME.to_owned())
+        }
+        BackendIdentity::OfficialOciCandidate(profile) => {
+            ("moose.oci.image", profile.image().to_owned())
+        }
+    };
     let provenance = ExecutionProvenance {
         producer: "sol.adapter.moose".to_owned(),
         opaque_references: vec![
@@ -561,8 +621,8 @@ fn completed_execution_response(
                 extensions: Default::default(),
             },
             OpaqueExecutionReference {
-                namespace: "moose.package".to_owned(),
-                reference: PHASE1_MOOSE_PACKAGE_FILENAME.to_owned(),
+                namespace: backend_namespace.to_owned(),
+                reference: backend_reference,
                 extensions: Default::default(),
             },
             OpaqueExecutionReference {
