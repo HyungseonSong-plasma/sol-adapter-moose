@@ -127,6 +127,38 @@ def provision(
     return 0 if status == "PROVISIONING_COMPLETED_IDENTITY_NOT_YET_ATTESTED" else 1
 
 
+def copy_verified_moose_metadata(prefix: Path, destination: Path) -> str:
+    """Preserve the *moose* record, never arbitrary moose-* helper packages.
+
+    The historical 2026-11-06 archive mistakenly retained a moose-tools record
+    because CI used find -name "moose-*.json" -print -quit.
+    """
+    metadata = prefix / "conda-meta"
+    matches = []
+    for candidate in sorted(metadata.glob("*.json")):
+        value = json.loads(candidate.read_text(encoding="utf-8"))
+        if value.get("name") == "moose":
+            matches.append((candidate, value))
+    if len(matches) != 1:
+        raise ValueError(f"expected one exact moose metadata record, found {len(matches)}")
+    filename, value = matches[0]
+    required = {
+        "name": "moose",
+        "version": "2026.08.12",
+        "build": "mpich",
+        "subdir": "linux-64",
+        "fn": "moose-2026.08.12-mpich.conda",
+        "sha256": PACKAGE_ARCHIVE_SHA256,
+    }
+    for field, expected in required.items():
+        if value.get(field) != expected:
+            raise ValueError(f"pinned MOOSE metadata mismatch: {field}")
+    original = filename.read_bytes()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(original)
+    return sha256(original).hexdigest()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--conda", required=True, type=Path)
