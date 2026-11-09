@@ -329,10 +329,19 @@ impl OciContainerLease {
     fn listed_cid(&self) -> Result<Option<String>, BackendError> {
         let filter = format!("name=^/{}$", self.container_name);
         let stdout = self.docker_lifecycle(&[
-            "container", "ls", "--all", "--no-trunc", "--filter", &filter, "--format",
+            "container",
+            "ls",
+            "--all",
+            "--no-trunc",
+            "--filter",
+            &filter,
+            "--format",
             "{{.ID}}",
         ])?;
-        let ids = stdout.lines().filter(|x| !x.trim().is_empty()).collect::<Vec<_>>();
+        let ids = stdout
+            .lines()
+            .filter(|x| !x.trim().is_empty())
+            .collect::<Vec<_>>();
         match ids.as_slice() {
             [] => Ok(None),
             [id] if id.len() == 64 && id.chars().all(|c| c.is_ascii_hexdigit()) => {
@@ -372,7 +381,10 @@ impl OciContainerLease {
         }
         // No residual container; the temporary CID may be removed safely.
         fs::remove_dir_all(&self.private_dir).map_err(|e| BackendError::Io {
-            context: format!("remove private OCI CID directory {}", self.private_dir.display()),
+            context: format!(
+                "remove private OCI CID directory {}",
+                self.private_dir.display()
+            ),
             detail: e.to_string(),
         })?;
         Ok(())
