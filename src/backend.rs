@@ -1,3 +1,4 @@
+use crate::official_moose_oci;
 use crate::physics_oci;
 use serde_json::Value;
 use std::fmt::{Display, Formatter};
@@ -153,11 +154,17 @@ impl ProcessOutput {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OciBackend {
+    Physics,
+    OfficialMoose,
+}
+
 #[derive(Debug, Clone)]
 pub struct MooseProcessRunner {
     executable: PathBuf,
     timeout: Duration,
-    physics_oci: bool,
+    oci: Option<OciBackend>,
 }
 
 impl MooseProcessRunner {
@@ -165,7 +172,7 @@ impl MooseProcessRunner {
         Self {
             executable: executable.into(),
             timeout,
-            physics_oci: false,
+            oci: None,
         }
     }
 
@@ -173,19 +180,39 @@ impl MooseProcessRunner {
         Self {
             executable: PathBuf::from("docker"),
             timeout,
-            physics_oci: true,
+            oci: Some(OciBackend::Physics),
+        }
+    }
+
+    pub fn official_moose_oci(timeout: Duration) -> Self {
+        Self {
+            executable: PathBuf::from("docker"),
+            timeout,
+            oci: Some(OciBackend::OfficialMoose),
         }
     }
 
     pub fn is_physics_oci(&self) -> bool {
-        self.physics_oci
+        self.oci == Some(OciBackend::Physics)
+    }
+
+    pub fn is_official_moose_oci(&self) -> bool {
+        self.oci == Some(OciBackend::OfficialMoose)
+    }
+
+    pub fn oci_image(&self) -> Option<&'static str> {
+        match self.oci {
+            Some(OciBackend::Physics) => Some(physics_oci::IMAGE),
+            Some(OciBackend::OfficialMoose) => Some(official_moose_oci::IMAGE),
+            None => None,
+        }
     }
 
     pub fn effective_executable(&self) -> String {
-        if self.physics_oci {
-            physics_oci::EXECUTABLE.to_owned()
-        } else {
-            self.executable.display().to_string()
+        match self.oci {
+            Some(OciBackend::Physics) => physics_oci::EXECUTABLE.to_owned(),
+            Some(OciBackend::OfficialMoose) => official_moose_oci::EXECUTABLE.to_owned(),
+            None => self.executable.display().to_string(),
         }
     }
 
@@ -194,7 +221,7 @@ impl MooseProcessRunner {
     }
 
     pub fn inferred_conda_prefix(&self) -> Option<PathBuf> {
-        if self.physics_oci {
+        if self.oci.is_some() {
             return None;
         }
         let bin = self.executable.parent()?;
@@ -221,7 +248,7 @@ impl MooseProcessRunner {
         args: &[&str],
         working_dir: Option<&Path>,
     ) -> Result<ProcessOutput, BackendError> {
-        let cid_file = self.physics_oci.then(|| {
+        let cid_file = self.oci.map(|_| {
             std::env::temp_dir().join(format!(
                 "sol-adaptor-moose-oci-{}-{}.cid",
                 std::process::id(),
@@ -229,7 +256,13 @@ impl MooseProcessRunner {
             ))
         });
         let mut command = if let Some(cid_file) = &cid_file {
-            physics_oci::docker_command(args, working_dir, cid_file)?
+            match self.oci {
+                Some(OciBackend::Physics) => physics_oci::docker_command(args, working_dir, cid_file)?,
+                Some(OciBackend::OfficialMoose) => {
+                    official_moose_oci::docker_command(args, working_dir, cid_file)?
+                }
+                None => unreachable!("CID allocated only for OCI runner"),
+            }
         } else {
             let mut command = Command::new(&self.executable);
             command.args(args);
