@@ -125,7 +125,7 @@ pub fn docker_command(
     command.arg(IMAGE);
     command.args([
         "-lc",
-        "set -euo pipefail; if [[ -f /environment ]]; then source /environment; fi; exec moose-opt \"$@\"",
+        "set -eo pipefail; if [[ -f /environment ]]; then source /environment; fi; set -u; exec moose-opt \"$@\"",
         "bash",
     ]);
     command.args(args);
