@@ -1,6 +1,6 @@
 # Physics OCI Thermal backend profile v1 (candidate)
 
-**Status:** Draft implementation under Adapter #34 / PR #49; bounded actual Native verification, *not merged into production*.
+**Status:** Thermal AP/PC0.2 OCI backend implementation via Adapter PR #49; deployment is restricted to the verified Thermal slice, not an authorization for Physics scientific acceptance or SOL caller migration.
 **Source acceptance:** Adapter PR HEAD, pinned SOL Runtime v0.2, existing immutable Physics runtime image.
 **No new SOL API or scientific capability.** **Current decision (2026-11-09):**
 the pinned Physics OCI image is the **default** for the supported Thermal 0.2 slice
@@ -138,19 +138,16 @@ Physics #281, and closed read-only research PR #48.
 - **D1**: SOL #172 receives an Option A (frozen semantic thermal 0.2)
   contract review request; it must remain
   **DECISION_REQUIRED / NO_CONSUMER_CUTOVER** until explicitly accepted.
-- **E1**: PR #38 is the **single source owner** of
-  `scripts/verify_thermal_same_run_evidence.py`. This Draft temporarily
-  loads its exact pinned commit
-  `fd813490a0f2275175ee64f96f7f23851814254b` and Git blob
-  `35029268d543e37302a52a582d3e19c6a6c7782d` into the CI
-  test-only environment; any mismatch fails closed. This PR must not
-  merge before the common verifier is accepted into the base branch
-  and the temporary cross-Draft fetch is replaced with the local
-  canonical script.
-  **Phase 5 same-file conflict was resolved:** this PR restored
-  `tests/phase5_thermal_vv.rs` to its exact main version and introduced
-  `tests/physics_oci_phase5_vv.rs` for OCI-only CSV+Exodus; PR #38
-  retains ownership of Conda CSV+Exodus source-evidence changes.
+- **E1**: **Merged PR #38**, main merge commit
+  `072951fe49c1631f0c81ffe83f1736a63342af76`, is the canonical
+  owner of `scripts/verify_thermal_same_run_evidence.py`. The OCI CI
+  now reads the **repository-local** integrated verifier and checks
+  its exact Git blob `35029268d543e37302a52a582d3e19c6a6c7782d`;
+  no cross-Draft runtime fetch is used.
+  **Phase 5 same-file conflict is resolved:** original
+  `tests/phase5_thermal_vv.rs` comes from merged PR #38 for historical
+  Conda evidence, while `tests/physics_oci_phase5_vv.rs` covers
+  OCI-only CSV+Exodus source V&V.
 
 Local source-build backend evaluation, merging, release, Physics consumer
 migration, scientific signoff and SOL contract acceptance remain outside
@@ -179,10 +176,11 @@ The native OCI/SOL P2/P3 and Phase 5 tests still run on the published
 digest under GitHub Actions. Tests in this Draft **do not** certify
 scientific or Conda release equivalence.
 
-**Integration order:** retain Draft #49; review the standalone common
-verifier in Draft #38; after a separately approved merge of #38,
-replace #49's test-only cross-Draft fetch with the repository-local
-canonical verifier, rerun exact-HEAD independent native and CI gates;
-only then review #49's own independent merge approval. The OCI
-default/Conda deferral is now explicitly approved **within the Draft**,
-but no branch ruleset change, merge or Local Build scope is authorized.
+**Integration order:** PR #38's shared source verifier was independently
+merged into main at `072951fe49c1631f0c81ffe83f1736a63342af76`. PR #49's
+cross-Draft test fetch has been replaced by this integrated local source;
+the Conda and OCI Phase 5 tests are in separate files. The user has
+explicitly approved PR #49 integration with OCI as the default Thermal
+backend and Conda as deferred/manual-only. This does not authorize
+scientific acceptance, SOL #172 formal contract acceptance, Local Build,
+new plasma capabilities, or Physics consumer cutover.

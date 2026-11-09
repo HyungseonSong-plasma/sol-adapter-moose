@@ -272,6 +272,142 @@ jobs:
           PHYSICS_B1_SOURCE_ROOT: .parity/physics
         run: cargo test --test hit_b1_parity --locked -- --nocapture
 
+  # Source-only verification: runs even if the external INL Conda channel is down.
+  # This validates the NEW verifier on an OLD immutable native evidence snapshot;
+  # it is NOT a new MOOSE solve, backend acceptance, or SOL 0.3 result.
+  thermal-source-offline:
+    name: Check historical thermal scalar+field evidence (offline)
+    needs: [scope]
+    if: needs.scope.outputs.backend_needed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact validator source checkout
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Obtain historical pinned Native evidence and verify six source checksums
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 42200001106 \
+            --repo HyungseonSong-plasma/sol-adapter-moose \
+            --name moose-backend-evidence \
+            --dir target/thermal-offline-original
+          python3 - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          root = Path('target/thermal-offline-original/phase5-vv-evidence')
+          run = root / 'runs/thermal-constant-field-vv'
+          expected = {
+            root / 'thermal-vv.json': '381f499d50bd688ee96edb4ad65e89b4d5eb66486b62e8626db4f112f20c57b0',
+            run / 'input.i': 'cc7dff7944affa21407b329e3b25b39e95c7d53e56d02f40b6fa4692af1fdaf3',
+            run / 'input_out.csv': '30feedd0d9a53813166c82c49482d3011a323197a22e7678297e6574c11d3113',
+            run / 'input_out.e': '8915ceb43c1c26a16d4dec537f26cf32c47c2cdaf3f4f750505cc5b0fdfcdcd6',
+            run / 'stdout.log': '7176496d3d17d58127dc52e555148d8f226d485c9752f97b1960747b773e474e',
+            run / 'stderr.log': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+          }
+          for path, digest in expected.items():
+              actual = sha256(path.read_bytes()).hexdigest()
+              if actual != digest:
+                  raise SystemExit(f'PINNED_NATIVE_SOURCE_MISMATCH: {path}')
+          print('PINNED_NATIVE_SOURCES=SHA256_VERIFIED count=6')
+          PY
+      - name: Run new source verifier without Conda or MOOSE backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'scipy==1.14.1'
+          python3 scripts/verify_thermal_same_run_evidence.py \
+            --evidence-root target/thermal-offline-original/phase5-vv-evidence \
+            --output target/thermal-offline-results/source-receipt.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path('target/thermal-offline-results/source-receipt.json').read_text())
+          assert r['status'] == 'NATIVE_SOURCE_SCALAR_FIELD_PAIR_VERIFIED'
+          assert r['source_checkout_state'] == 'NOT_ATTESTED_OFFLINE'
+          assert r['canonical_result_semantics'] == 'NOT_EVALUATED'
+          assert r['science_owner_signoff'] == 'PENDING'
+          assert r['adapter_protocol_result_0_3'] == 'NOT_IMPLEMENTED'
+          assert len(r['output_source']) == 5
+          print('THERMAL_OFFLINE_VERIFIER=PASS; NATIVE_NEW_RUN=NOT_EVALUATED')
+          PY
+      - name: Reject intentionally altered scalar source (negative control)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import shutil
+          from pathlib import Path
+          source = Path('target/thermal-offline-original')
+          altered = Path('target/thermal-offline-mutated')
+          shutil.copytree(source, altered)
+          csv = altered / 'phase5-vv-evidence/runs/thermal-constant-field-vv/input_out.csv'
+          old = csv.read_bytes()
+          assert old.count(b'400.00000000001') == 1
+          csv.write_bytes(old.replace(b'400.00000000001', b'390.00000000001', 1))
+          PY
+          if python3 scripts/verify_thermal_same_run_evidence.py \
+             --evidence-root target/thermal-offline-mutated/phase5-vv-evidence \
+             --output target/thermal-offline-results/invalid-source.json \
+             > target/thermal-offline-results/negative.log 2>&1; then
+            echo 'NEGATIVE_CONTROL_UNEXPECTED_PASS' >&2
+            exit 1
+          fi
+          test ! -e target/thermal-offline-results/invalid-source.json
+          grep -q 'scalar/field numerical extrema differ' \
+            target/thermal-offline-results/negative.log
+          echo 'THERMAL_OFFLINE_NEGATIVE_CONTROL=REJECTED_AS_EXPECTED'
+      - name: Shared verifier must reject falsely claimed OCI provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          if python3 scripts/verify_thermal_same_run_evidence.py \
+            --evidence-root target/thermal-offline-original/phase5-vv-evidence \
+            --required-backend-profile physics_oci_thermal_v1 \
+            --output target/thermal-offline-results/mislabeled-oci.json \
+            >target/thermal-offline-results/profile-negative.log 2>&1; then
+            echo 'HISTORICAL_CONDA_EVIDENCE_MISLABELED_OCI' >&2
+            exit 1
+          fi
+          test ! -e target/thermal-offline-results/mislabeled-oci.json
+          grep -Fq 'evidence does not claim the requested explicit backend profile' \
+            target/thermal-offline-results/profile-negative.log
+          if python3 scripts/verify_thermal_same_run_evidence.py \
+            --evidence-root target/thermal-offline-original/phase5-vv-evidence \
+            --required-backend-profile unexpected_profile \
+            --output target/thermal-offline-results/unknown-profile.json \
+            >target/thermal-offline-results/unknown-profile-negative.log 2>&1; then
+            echo 'UNKNOWN_PROFILE_UNEXPECTED_PASS' >&2
+            exit 1
+          fi
+          test ! -e target/thermal-offline-results/unknown-profile.json
+          grep -Fq 'unrecognized backend profile' \
+            target/thermal-offline-results/unknown-profile-negative.log
+          echo 'SHARED_SOURCE_VERIFIER_PROFILE_GUARDS=PASS'
+      - name: Save bounded source-only proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thermal-offline-verifier-evidence
+          path: target/thermal-offline-results/
+          retention-days: 30
+          if-no-files-found: warn
+
   # Physics OCI is the Thermal 0.2 default and mandatory Native gate.
   # Exact-Conda remains a distinct historical compatibility check, suspended
   # on routine PR/push runs and available only by explicit manual opt-in.
@@ -351,23 +487,16 @@ jobs:
             --request target/physics-oci-sol-consumer/request.json \
             --adapter-sha "$HEAD_SHA" --runtime-sha "$SOL_SHA" \
             --output target/physics-oci-sol-consumer/parity.json
-      - name: Load exact shared Thermal verifier from Draft PR 38
+      - name: Verify integrated shared Thermal verifier from merged PR 38
         shell: bash
-        env:
-          VERIFIER_SOURCE_COMMIT: fd813490a0f2275175ee64f96f7f23851814254b
-          VERIFIER_SOURCE_BLOB: 35029268d543e37302a52a582d3e19c6a6c7782d
         run: |
           set -euo pipefail
-          # PR #38 owns the single verifier implementation until merged.
-          # Fetch the pinned commit without changing this PR's exact HEAD.
-          git fetch --no-tags --depth=1 origin "$VERIFIER_SOURCE_COMMIT"
-          actual_blob=$(git rev-parse "$VERIFIER_SOURCE_COMMIT:scripts/verify_thermal_same_run_evidence.py")
-          test "$actual_blob" = "$VERIFIER_SOURCE_BLOB"
-          git show "$VERIFIER_SOURCE_COMMIT:scripts/verify_thermal_same_run_evidence.py" \
-            > "$RUNNER_TEMP/verify_thermal_same_run_evidence.py"
-          test "$(git hash-object "$RUNNER_TEMP/verify_thermal_same_run_evidence.py")" = "$VERIFIER_SOURCE_BLOB"
-          echo "THERMAL_SOURCE_VERIFIER=$RUNNER_TEMP/verify_thermal_same_run_evidence.py" >> "$GITHUB_ENV"
-          echo "SHARED_VERIFIER_SOURCE_PIN=PASS commit=$VERIFIER_SOURCE_COMMIT blob=$VERIFIER_SOURCE_BLOB"
+          # PR #38 is integrated in this branch's Git history.
+          test -s scripts/verify_thermal_same_run_evidence.py
+          actual_blob=$(git hash-object scripts/verify_thermal_same_run_evidence.py)
+          test "$actual_blob" = '35029268d543e37302a52a582d3e19c6a6c7782d'
+          echo "THERMAL_SOURCE_VERIFIER=$PWD/scripts/verify_thermal_same_run_evidence.py" >> "$GITHUB_ENV"
+          echo "INTEGRATED_VERIFIER_LOCAL_BLOB=PASS blob=$actual_blob"
       - name: OCI Phase5 independent numerical V&V and same-run CSV/Exodus field
         shell: bash
         env:
