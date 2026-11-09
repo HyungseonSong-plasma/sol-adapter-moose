@@ -261,12 +261,14 @@ impl MooseProcessRunner {
         // In particular, a Docker CLI failure cannot silently preserve an
         // orphaned container. Cleanup uncertainty overrides a prior success.
         let outcome = (|| -> Result<ProcessOutput, BackendError> {
-            let stdout = child.stdout.take().ok_or_else(|| {
-                BackendError::Process("stdout pipe unavailable".to_owned())
-            })?;
-            let stderr = child.stderr.take().ok_or_else(|| {
-                BackendError::Process("stderr pipe unavailable".to_owned())
-            })?;
+            let stdout = child
+                .stdout
+                .take()
+                .ok_or_else(|| BackendError::Process("stdout pipe unavailable".to_owned()))?;
+            let stderr = child
+                .stderr
+                .take()
+                .ok_or_else(|| BackendError::Process("stderr pipe unavailable".to_owned()))?;
             let stdout_reader = thread::spawn(move || read_all(stdout));
             let stderr_reader = thread::spawn(move || read_all(stderr));
 
