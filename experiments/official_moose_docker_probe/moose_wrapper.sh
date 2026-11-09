@@ -3,12 +3,14 @@
 # Not an accepted SOL adapter backend or a Conda package-identity substitute.
 set -euo pipefail
 : "${MOOSE_DOCKER_PIN:?missing trusted pinned image}"
-: "${GITHUB_WORKSPACE:?missing workspace}"
+# Consumer-provided mount root; GitHub checkout root remains compatible.
+# For local clients mount only the current working directory by default.
+mount_root="${SOL_MOOSE_OCI_MOUNT_ROOT:-${GITHUB_WORKSPACE:-$(pwd -P)}}"
 if [[ "$MOOSE_DOCKER_PIN" != 'idaholab/moose@sha256:47fc6c5bff5e86869e7c467f999e9585ece13af9ffd1f580fef5369728a93452' ]]; then
   echo "MOOSE_DOCKER_PIN must equal the separately approved candidate digest" >&2
   exit 64
 fi
-workspace="$(realpath "$GITHUB_WORKSPACE")"
+workspace="$(realpath "$mount_root")"
 working_dir="$(pwd -P)"
 case "$working_dir" in
   "$workspace"|"$workspace"/*) ;;
