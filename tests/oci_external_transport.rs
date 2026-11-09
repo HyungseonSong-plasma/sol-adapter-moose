@@ -225,9 +225,12 @@ fn explicit_conda_selection_does_not_fall_through_to_oci() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = command.spawn().unwrap();
-    child.stdin.as_mut().unwrap().write_all(
-        rpc("execute_plan", serde_json::from_str(REQUEST).unwrap(), 101).as_bytes()
-    ).unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(rpc("execute_plan", serde_json::from_str(REQUEST).unwrap(), 101).as_bytes())
+        .unwrap();
     drop(child.stdin.take());
     let frames = parse(child.wait_with_output().unwrap());
     assert_eq!(frames.len(), 1);
