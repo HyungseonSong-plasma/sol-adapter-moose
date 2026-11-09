@@ -44,11 +44,15 @@ fn invoke(
     {
         let input = child.stdin.as_mut().expect("stdin pipe");
         for frame in frames {
-            input.write_all(frame.as_bytes()).expect("write request frame");
+            input
+                .write_all(frame.as_bytes())
+                .expect("write request frame");
         }
     }
     drop(child.stdin.take());
-    child.wait_with_output().expect("wait for adapter subprocess")
+    child
+        .wait_with_output()
+        .expect("wait for adapter subprocess")
 }
 
 fn parse(output: Output) -> Vec<Value> {
@@ -109,17 +113,19 @@ fn external_oci_protocol_v02_serialization_and_independent_runs() {
     let mut observed_input = None;
     for (index, response) in observations.iter().enumerate().skip(1) {
         assert_eq!(response["id"], json!((index as u64) + 71));
-        let mut result = ExecutePlanResponseV02::from_json(
-            &serde_json::to_string(payload(response)).unwrap(),
-        )
-        .unwrap();
+        let mut result =
+            ExecutePlanResponseV02::from_json(&serde_json::to_string(payload(response)).unwrap())
+                .unwrap();
         result.validate_against(&request).unwrap();
         assert_eq!(result.execution, ExecutionOutcome::Completed);
         let provenance = result.provenance.expect("provenance");
         assert!(provenance.opaque_references.iter().any(|x| {
             x.namespace == "moose.oci.image" && x.reference == APPROVED_CANDIDATE_IMAGE
         }));
-        assert!(!provenance.opaque_references.iter().any(|x| x.namespace == "moose.package"));
+        assert!(!provenance
+            .opaque_references
+            .iter()
+            .any(|x| x.namespace == "moose.package"));
         let run_key = provenance
             .opaque_references
             .iter()
@@ -135,7 +141,11 @@ fn external_oci_protocol_v02_serialization_and_independent_runs() {
             "stdout.log",
             "stderr.log",
         ] {
-            assert!(run_dir.join(name).is_file(), "missing {name} at {}", run_dir.display());
+            assert!(
+                run_dir.join(name).is_file(),
+                "missing {name} at {}",
+                run_dir.display()
+            );
         }
         let input = fs::read(run_dir.join("input.i")).unwrap();
         if let Some(previous) = &observed_input {
@@ -145,7 +155,10 @@ fn external_oci_protocol_v02_serialization_and_independent_runs() {
         }
         seen_run_keys.push(run_key);
     }
-    assert_ne!(seen_run_keys[0], seen_run_keys[1], "two runs must not reuse a workspace");
+    assert_ne!(
+        seen_run_keys[0], seen_run_keys[1],
+        "two runs must not reuse a workspace"
+    );
     fs::write(
         root.join("external-protocol-report.json"),
         serde_json::to_vec_pretty(&json!({
@@ -166,11 +179,14 @@ fn external_oci_rejects_failed_probe_without_workspace_creation() {
     let Some(_) = std::env::var_os("SOL_MOOSE_OCI_EXECUTABLE") else {
         return;
     };
-    let root =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/oci-external-failed-probe");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/oci-external-failed-probe");
     let _ = fs::remove_dir_all(&root);
     let output = invoke(
-        &[rpc("execute_plan", serde_json::from_str(REQUEST).unwrap(), 81)],
+        &[rpc(
+            "execute_plan",
+            serde_json::from_str(REQUEST).unwrap(),
+            81,
+        )],
         &root,
         std::ffi::OsStr::new("/usr/bin/false"),
         APPROVED_CANDIDATE_IMAGE,
@@ -179,10 +195,9 @@ fn external_oci_rejects_failed_probe_without_workspace_creation() {
     let frames = parse(output);
     assert_eq!(frames.len(), 1);
     let response = &frames[0];
-    let mut result = ExecutePlanResponseV02::from_json(
-        &serde_json::to_string(payload(response)).unwrap(),
-    )
-    .unwrap();
+    let mut result =
+        ExecutePlanResponseV02::from_json(&serde_json::to_string(payload(response)).unwrap())
+            .unwrap();
     let request = ExecutePlanRequestV02::from_json(REQUEST).unwrap();
     result.validate_against(&request).unwrap();
     assert_eq!(result.execution, ExecutionOutcome::Rejected);
@@ -199,7 +214,11 @@ fn external_oci_launch_rejects_digest_mismatch_before_any_side_effects() {
         .join("target/oci-external-transport-mismatched-identity");
     let _ = fs::remove_dir_all(&root);
     let output = invoke(
-        &[rpc("execute_plan", serde_json::from_str(REQUEST).unwrap(), 91)],
+        &[rpc(
+            "execute_plan",
+            serde_json::from_str(REQUEST).unwrap(),
+            91,
+        )],
         &root,
         executable.as_os_str(),
         APPROVED_CANDIDATE_IMAGE,
@@ -208,5 +227,8 @@ fn external_oci_launch_rejects_digest_mismatch_before_any_side_effects() {
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("pin disagree"));
-    assert!(!root.exists(), "identity rejection must be side-effect free");
+    assert!(
+        !root.exists(),
+        "identity rejection must be side-effect free"
+    );
 }
