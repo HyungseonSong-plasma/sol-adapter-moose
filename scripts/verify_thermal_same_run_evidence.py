@@ -107,7 +107,8 @@ def _field(data: bytes) -> dict:
     }
 
 
-def verify(archive: Path | None, evidence_root: Path | None) -> dict:
+def verify(archive: Path | None, evidence_root: Path | None,
+           required_backend_profile: str | None = None) -> dict:
     # Native CI supplies the exact checked-out PR HEAD. Offline archive review
     # lacks a trusted Git workspace and must be labelled source-unattested.
     expected_head = os.environ.get("EXPECTED_SOURCE_SHA")
@@ -120,6 +121,12 @@ def verify(archive: Path | None, evidence_root: Path | None) -> dict:
             raise ValueError("backend evidence source checkout differs from PR HEAD")
     sources = _read_sources(archive, evidence_root)
     summary = json.loads(sources[SUMMARY])
+    if required_backend_profile is not None:
+        if required_backend_profile != "physics_oci_thermal_v1":
+            raise ValueError("unrecognized backend profile in source-only verifier")
+        if (summary.get("backend_profile") != required_backend_profile
+                or summary.get("exodus_field_required") is not True):
+            raise ValueError("evidence does not claim the requested explicit backend profile")
     if summary["canonical_result_semantics_claimed"] is not False:
         raise ValueError("candidate unexpectedly claims canonical result semantics")
     if summary["benchmark"] != "steady_1d_constant_temperature_natural_zero_flux":
@@ -194,8 +201,12 @@ def main() -> None:
     group.add_argument("--archive", type=Path)
     group.add_argument("--evidence-root", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--required-backend-profile", type=str)
     args = parser.parse_args()
-    report = verify(args.archive, args.evidence_root)
+    report = verify(
+        args.archive, args.evidence_root,
+        required_backend_profile=args.required_backend_profile
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n",
                            encoding="utf-8")
