@@ -45,7 +45,9 @@ fn run() -> Result<(), String> {
                     let pin = env::var("MOOSE_DOCKER_PIN")
                         .map_err(|_| "OCI executable requires MOOSE_DOCKER_PIN".to_owned())?;
                     if pin != image {
-                        return Err("OCI candidate image and invoked Docker pin disagree".to_owned());
+                        return Err(
+                            "OCI candidate image and invoked Docker pin disagree".to_owned()
+                        );
                     }
                     ExecutionEnvironment::configured_official_oci_candidate(
                         PathBuf::from(executable),
