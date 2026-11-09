@@ -180,8 +180,8 @@ fn external_oci_protocol_v02_serialization_and_independent_runs() {
 
 #[test]
 fn default_oci_without_launcher_preserves_describe_and_fails_closed_on_execute() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target/oci-default-without-launcher");
+    let root =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/oci-default-without-launcher");
     let _ = fs::remove_dir_all(&root);
     let mut command = Command::new(env!("CARGO_BIN_EXE_sol-adaptor-moose"));
     command
@@ -197,16 +197,17 @@ fn default_oci_without_launcher_preserves_describe_and_fails_closed_on_execute()
     {
         let stdin = child.stdin.as_mut().unwrap();
         stdin
-            .write_all(
-                rpc("execute_plan", serde_json::from_str(REQUEST).unwrap(), 99).as_bytes(),
-            )
+            .write_all(rpc("execute_plan", serde_json::from_str(REQUEST).unwrap(), 99).as_bytes())
             .unwrap();
     }
     drop(child.stdin.take());
     let response = parse(child.wait_with_output().unwrap());
     assert_eq!(response.len(), 1);
     assert_eq!(payload(&response[0])["execution"], "unavailable");
-    assert!(!root.exists(), "missing OCI launcher must not create a workspace");
+    assert!(
+        !root.exists(),
+        "missing OCI launcher must not create a workspace"
+    );
 }
 
 #[test]
