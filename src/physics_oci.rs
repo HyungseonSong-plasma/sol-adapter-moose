@@ -152,7 +152,9 @@ pub fn docker_command(
                 context: format!("read OCI workspace ownership {}", real.display()),
                 detail: error.to_string(),
             })?;
-            command.arg("--user").arg(format!("{}:{}", owner.uid(), owner.gid()));
+            command
+                .arg("--user")
+                .arg(format!("{}:{}", owner.uid(), owner.gid()));
         }
         #[cfg(not(unix))]
         return Err(BackendError::Process(
