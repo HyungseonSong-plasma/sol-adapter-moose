@@ -13,6 +13,8 @@ from hashlib import sha256
 from io import BytesIO, StringIO
 import json
 import math
+import os
+import subprocess
 from pathlib import Path
 import re
 import zipfile
@@ -106,6 +108,16 @@ def _field(data: bytes) -> dict:
 
 
 def verify(archive: Path | None, evidence_root: Path | None) -> dict:
+    # Native CI supplies the exact checked-out PR HEAD. Offline archive review
+    # lacks a trusted Git workspace and must be labelled source-unattested.
+    expected_head = os.environ.get("EXPECTED_SOURCE_SHA")
+    observed_head = None
+    if expected_head:
+        observed_head = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True
+        ).strip()
+        if observed_head != expected_head:
+            raise ValueError("backend evidence source checkout differs from PR HEAD")
     sources = _read_sources(archive, evidence_root)
     summary = json.loads(sources[SUMMARY])
     if summary["canonical_result_semantics_claimed"] is not False:
@@ -147,6 +159,10 @@ def verify(archive: Path | None, evidence_root: Path | None) -> dict:
         "science_owner_signoff": "PENDING",
         "sol_validator_approval": "PENDING",
         "adapter_protocol_result_0_3": "NOT_IMPLEMENTED",
+        "source_commit_sha": observed_head,
+        "source_checkout_state": (
+            "EXACT_HEAD_OBSERVED_IN_CI" if observed_head else "NOT_ATTESTED_OFFLINE"
+        ),
         "run_key": RUN_KEY,
         "native_step_semantics": "INDEX_ONLY_NOT_PHYSICAL_TIME",
         "output_source": {
