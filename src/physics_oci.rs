@@ -6,10 +6,13 @@
 use crate::backend::BackendError;
 use serde_json::Value;
 use std::fs;
+use std::io::{ErrorKind, Read};
 #[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 pub const IMAGE: &str = "ghcr.io/hyungseonsong-plasma/physics-runtime@sha256:cda9f0d09a17aed5fa606e97d1ee5c3450f7280536cec2e5c635402bb07d972c";
 pub const BUILD_BASE: &str = "ghcr.io/hyungseonsong-plasma/physics-build-base@sha256:2c3352da4f5c1b2ae98475fc01463ad0cdbc6ce7d221ce55055ddea152182008";
@@ -112,7 +115,13 @@ pub fn docker_command(
     args: &[&str],
     work_dir: Option<&Path>,
     cid_file: &Path,
+    container_name: &str,
 ) -> Result<Command, BackendError> {
+    if !valid_container_name(container_name) {
+        return Err(BackendError::Process(
+            "invalid private Physics OCI container name".to_owned(),
+        ));
+    }
     let mut command = Command::new("docker");
     command.args([
         "run",
@@ -127,6 +136,7 @@ pub fn docker_command(
         "--cidfile",
     ]);
     command.arg(cid_file);
+    command.args(["--name", container_name]);
     if let Some(work_dir) = work_dir {
         let real = work_dir.canonicalize().map_err(|error| BackendError::Io {
             context: format!("canonicalize OCI workspace {}", work_dir.display()),
@@ -172,29 +182,213 @@ pub fn docker_command(
     Ok(command)
 }
 
-/// A killed Docker *client* does not guarantee a killed container. On timeout
-/// explicitly kill the recorded container; uncertain cleanup is a hard failure.
-pub fn terminate_container(cid_file: &Path) -> Result<(), BackendError> {
-    let id = fs::read_to_string(cid_file).map_err(|error| {
-        BackendError::Process(format!(
-            "cannot establish Physics OCI container ID on timeout: {error}"
-        ))
-    })?;
-    let id = id.trim();
-    if id.len() != 64 || !id.chars().all(|char| char.is_ascii_hexdigit()) {
-        return Err(BackendError::Process(
-            "invalid Physics OCI container ID on timeout".to_owned(),
-        ));
+// A 128-bit, OS-random container name and an atomically created mode-0700
+// directory are needed for both CID-file security and orphan cleanup.
+// PID+counter filenames in a world-traversable tmp directory are insufficient.
+const OCI_CONTAINER_PREFIX: &str = "sol-adaptor-moose-oci-";
+const CLEANUP_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn valid_container_name(name: &str) -> bool {
+    name.starts_with(OCI_CONTAINER_PREFIX)
+        && name.len() == OCI_CONTAINER_PREFIX.len() + 32
+        && name[OCI_CONTAINER_PREFIX.len()..]
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+}
+
+pub struct OciContainerLease {
+    private_dir: PathBuf,
+    cid_file: PathBuf,
+    container_name: String,
+    finished: bool,
+}
+
+impl OciContainerLease {
+    pub fn new() -> Result<Self, BackendError> {
+        #[cfg(not(unix))]
+        {
+            return Err(BackendError::Process(
+                "Physics OCI lifecycle requires a Unix host".to_owned(),
+            ));
+        }
+        #[cfg(unix)]
+        {
+            let mut random = [0u8; 16];
+            for _attempt in 0..4 {
+                fs::File::open("/dev/urandom")
+                    .and_then(|mut f| f.read_exact(&mut random))
+                    .map_err(|e| BackendError::Io {
+                        context: "get kernel randomness for private OCI container".to_owned(),
+                        detail: e.to_string(),
+                    })?;
+                let nonce: String = random.iter().map(|b| format!("{b:02x}")).collect();
+                let container_name = format!("{OCI_CONTAINER_PREFIX}{nonce}");
+                let dir = std::env::temp_dir().join(&container_name);
+                let result = fs::DirBuilder::new().mode(0o700).create(&dir);
+                match result {
+                    Ok(()) => {
+                        return Ok(Self {
+                            cid_file: dir.join("container.cid"),
+                            private_dir: dir,
+                            container_name,
+                            finished: false,
+                        })
+                    }
+                    Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
+                    Err(e) => {
+                        return Err(BackendError::Io {
+                            context: format!("create private OCI directory {}", dir.display()),
+                            detail: e.to_string(),
+                        })
+                    }
+                }
+            }
+            Err(BackendError::Process(
+                "cannot allocate collision-free private OCI container directory".to_owned(),
+            ))
+        }
     }
-    let output = Command::new("docker")
-        .args(["kill", id])
-        .output()
-        .map_err(|error| BackendError::Process(format!("OCI timeout kill: {error}")))?;
-    if !output.status.success() {
-        return Err(BackendError::Process(format!(
-            "OCI timeout kill did not confirm termination: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )));
+
+    pub fn cid_file(&self) -> &Path {
+        &self.cid_file
     }
-    Ok(())
+
+    pub fn container_name(&self) -> &str {
+        &self.container_name
+    }
+
+    fn read_cid(&self) -> Result<Option<String>, BackendError> {
+        let metadata = match fs::symlink_metadata(&self.cid_file) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                return Err(BackendError::Process(format!(
+                    "inspect private Docker CID file: {error}"
+                )))
+            }
+        };
+        if !metadata.file_type().is_file() {
+            return Err(BackendError::Process(
+                "Docker CID file must be a regular file, not a symlink".to_owned(),
+            ));
+        }
+        let cid = fs::read_to_string(&self.cid_file)
+            .map_err(|e| BackendError::Process(format!("read private Docker CID: {e}")))?;
+        let cid = cid.trim();
+        if cid.len() != 64 || !cid.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(BackendError::Process(
+                "Docker CID is not a 64-digit hex container identity".to_owned(),
+            ));
+        }
+        Ok(Some(cid.to_ascii_lowercase()))
+    }
+
+    fn docker_lifecycle(&self, args: &[&str]) -> Result<String, BackendError> {
+        let mut child = Command::new("docker")
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| BackendError::Process(format!("spawn OCI lifecycle command: {e}")))?;
+        let deadline = Instant::now() + CLEANUP_TIMEOUT;
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let output = child.wait_with_output().map_err(|e| {
+                        BackendError::Process(format!("read OCI lifecycle status: {e}"))
+                    })?;
+                    if !status.success() {
+                        return Err(BackendError::Process(format!(
+                            "Docker lifecycle {:?} failed: {}",
+                            args,
+                            String::from_utf8_lossy(&output.stderr)
+                        )));
+                    }
+                    return String::from_utf8(output.stdout).map_err(|e| {
+                        BackendError::Process(format!("invalid Docker lifecycle output: {e}"))
+                    });
+                }
+                Ok(None) if Instant::now() >= deadline => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(BackendError::Process(
+                        "Docker lifecycle/cleanup command timed out; container state UNKNOWN"
+                            .to_owned(),
+                    ));
+                }
+                Ok(None) => thread::sleep(Duration::from_millis(20)),
+                Err(e) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(BackendError::Process(format!(
+                        "cannot check Docker lifecycle process: {e}"
+                    )));
+                }
+            }
+        }
+    }
+
+    fn listed_cid(&self) -> Result<Option<String>, BackendError> {
+        let filter = format!("name=^/{}$", self.container_name);
+        let stdout = self.docker_lifecycle(&[
+            "container", "ls", "--all", "--no-trunc", "--filter", &filter, "--format",
+            "{{.ID}}",
+        ])?;
+        let ids = stdout.lines().filter(|x| !x.trim().is_empty()).collect::<Vec<_>>();
+        match ids.as_slice() {
+            [] => Ok(None),
+            [id] if id.len() == 64 && id.chars().all(|c| c.is_ascii_hexdigit()) => {
+                Ok(Some(id.to_ascii_lowercase()))
+            }
+            _ => Err(BackendError::Process(
+                "ambiguous Docker container identity for private name".to_owned(),
+            )),
+        }
+    }
+
+    /// Called after the Docker CLI has exited or been killed. A missing CID
+    /// is not grounds to ignore a container: the cryptographically random
+    /// Docker name permits a name-based orphan search as a second witness.
+    /// Any unexpected leftover becomes an error even when removal succeeds.
+    pub fn finalize(mut self) -> Result<(), BackendError> {
+        let recorded = self.read_cid()?;
+        let existing = self.listed_cid()?;
+        if let (Some(recorded), Some(existing)) = (&recorded, &existing) {
+            if recorded != existing {
+                return Err(BackendError::Process(
+                    "Docker CID file disagrees with private Docker container name".to_owned(),
+                ));
+            }
+        }
+        if existing.is_some() {
+            self.docker_lifecycle(&["container", "rm", "--force", &self.container_name])?;
+            if self.listed_cid()?.is_some() {
+                return Err(BackendError::Process(
+                    "orphan OCI container still present after forced removal".to_owned(),
+                ));
+            }
+            return Err(BackendError::Process(
+                "orphan OCI container detected after Docker client exit; forcibly removed"
+                    .to_owned(),
+            ));
+        }
+        // No residual container; the temporary CID may be removed safely.
+        fs::remove_dir_all(&self.private_dir).map_err(|e| BackendError::Io {
+            context: format!("remove private OCI CID directory {}", self.private_dir.display()),
+            detail: e.to_string(),
+        })?;
+        self.finished = true;
+        Ok(())
+    }
+}
+
+impl Drop for OciContainerLease {
+    fn drop(&mut self) {
+        // The caller receives a hard failure on any uncertain lifecycle.
+        // Keep evidence for investigation if state verification failed.
+        // No best-effort kill by a potentially corrupted CID.
+        if !self.finished {
+            // Intentionally preserve the private directory on failure.
+        }
+    }
 }
