@@ -143,7 +143,7 @@ pub fn docker_command(
         }
         command
             .arg("--mount")
-            .arg(format!("type=bind,src={path},dst=/work,rw"))
+            .arg(format!("type=bind,src={path},dst=/work"))
             .args(["--workdir", "/work"]);
     }
     command.arg(IMAGE);
