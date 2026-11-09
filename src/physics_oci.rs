@@ -122,6 +122,8 @@ pub fn docker_command(
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         "--pids-limit=128",
+        "--tmpfs",
+        "/tmp:rw,nosuid,nodev,mode=1777",
         "--cidfile",
     ]);
     command.arg(cid_file);
