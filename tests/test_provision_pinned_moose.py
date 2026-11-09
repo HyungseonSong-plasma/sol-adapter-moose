@@ -7,6 +7,7 @@ import unittest
 
 from scripts.provision_pinned_moose import (
     CHANNEL, PACKAGE, PACKAGE_ARCHIVE_SHA256, classify, provision,
+    copy_verified_moose_metadata,
 )
 
 
@@ -79,6 +80,42 @@ class ProvisioningContractTests(unittest.TestCase):
         )
         self.assertEqual((code, count, waits), (1, 1, 0))
         self.assertEqual(report["status"], "NONTRANSIENT_PROVISIONING_FAILURE")
+
+    def test_metadata_selection_excludes_moose_tools(self):
+        with TemporaryDirectory() as temp:
+            prefix = Path(temp)
+            folder = prefix / "conda-meta"
+            folder.mkdir()
+            helper = {
+                "name": "moose-tools", "version": "2026.06.16",
+                "build": "py314h843be8b_0", "sha256": "f" * 64,
+            }
+            proper = {
+                "name": "moose", "version": "2026.08.12", "build": "mpich",
+                "subdir": "linux-64", "fn": "moose-2026.08.12-mpich.conda",
+                "sha256": PACKAGE_ARCHIVE_SHA256,
+            }
+            (folder / "moose-tools-2026.06.16-py314.json").write_text(json.dumps(helper))
+            source = folder / "moose-2026.08.12-mpich.json"
+            source.write_text(json.dumps(proper))
+            selected = prefix / "evidence" / "phase1-moose-conda-meta.json"
+            fingerprint = copy_verified_moose_metadata(prefix, selected)
+            self.assertEqual(json.loads(selected.read_text())["name"], "moose")
+            self.assertEqual(len(fingerprint), 64)
+            proper["sha256"] = "0" * 64
+            source.write_text(json.dumps(proper))
+            with self.assertRaisesRegex(ValueError, "sha256"):
+                copy_verified_moose_metadata(prefix, selected)
+
+    def test_duplicate_exact_moose_metadata_fails_closed(self):
+        with TemporaryDirectory() as temp:
+            prefix = Path(temp)
+            folder = prefix / "conda-meta"
+            folder.mkdir()
+            for name in ("moose-A.json", "moose-B.json"):
+                (folder / name).write_text(json.dumps({"name": "moose"}))
+            with self.assertRaisesRegex(ValueError, "found 2"):
+                copy_verified_moose_metadata(prefix, prefix / "receipt.json")
 
     def test_partial_prefix_fails_closed(self):
         code, report, count, waits = self.run_case(
