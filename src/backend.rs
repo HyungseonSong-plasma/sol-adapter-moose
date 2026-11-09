@@ -277,9 +277,7 @@ impl MooseProcessRunner {
                     let status = child.wait().map_err(|error| {
                         BackendError::Process(format!("wait after timeout: {error}"))
                     })?;
-                    if let Err(error) = container_cleanup {
-                        return Err(error);
-                    }
+                    container_cleanup?;
                     break (status, true);
                 }
                 None => thread::sleep(Duration::from_millis(20)),
