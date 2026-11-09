@@ -93,6 +93,20 @@ impl ExecutionEnvironment {
         }
     }
 
+    /// OCI is selected but no executable is configured; retain OCI identity
+    /// while returning the protocol's truthful unavailable result.
+    pub fn unavailable_official_oci_candidate(
+        workspace_root: impl Into<PathBuf>,
+        image: &str,
+    ) -> Result<Self, String> {
+        let profile = OfficialOciProfile::candidate(image)?;
+        Ok(Self {
+            runner: None,
+            workspace_root: workspace_root.into(),
+            backend_identity: BackendIdentity::OfficialOciCandidate(profile),
+        })
+    }
+
     pub fn workspace_root(&self) -> &Path {
         &self.workspace_root
     }
@@ -384,9 +398,13 @@ impl ExecutionEnvironment {
 
     fn backend_readiness(&self) -> BackendReadiness {
         let Some(runner) = self.runner.as_ref() else {
-            return BackendReadiness::Unavailable(
-                "SOL_MOOSE_EXECUTABLE is not configured for the current adapter process".to_owned(),
-            );
+            let selected_executable = match self.backend_identity {
+                BackendIdentity::ExactCondaPhase1 => "SOL_MOOSE_EXECUTABLE",
+                BackendIdentity::OfficialOciCandidate(_) => "SOL_MOOSE_OCI_EXECUTABLE",
+            };
+            return BackendReadiness::Unavailable(format!(
+                "{selected_executable} is not configured for the current adapter process"
+            ));
         };
         let result = match &self.backend_identity {
             BackendIdentity::ExactCondaPhase1 => {
