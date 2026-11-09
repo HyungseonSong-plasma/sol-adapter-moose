@@ -33,7 +33,7 @@ jobs:
           assert manifest['schema_version'] == 2
           assert manifest['source_repository'] == 'HyungseonSong-plasma/chatgpt-operation'
           os_data = manifest['operating_system']
-          assert os_data['revision'] == '9b335e3fbb9c5e8e323e382daeec56fa25336822'
+          assert os_data['revision'] == '059050330a549fce0b543687e2e9d4dca6c3f624'
           assert os_data['expected_version'] == 'Samuel'
           assert re.fullmatch(r'[0-9a-f]{40}', os_data['revision'])
           assert alias['operating_system']['repository'] == manifest['source_repository']
