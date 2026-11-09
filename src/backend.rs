@@ -5,8 +5,8 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use std::thread;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::thread;
 use std::time::{Duration, Instant};
 
 static OCI_CID_COUNTER: AtomicU64 = AtomicU64::new(0);
