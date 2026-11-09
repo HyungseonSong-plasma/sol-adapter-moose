@@ -205,6 +205,10 @@ fn default_oci_without_launcher_preserves_describe_and_fails_closed_on_execute()
     assert_eq!(response.len(), 1);
     assert_eq!(payload(&response[0])["execution"], "unavailable");
     assert!(
+        response[0].to_string().contains("SOL_MOOSE_OCI_EXECUTABLE"),
+        "missing launcher diagnostics must identify the selected OCI backend"
+    );
+    assert!(
         !root.exists(),
         "missing OCI launcher must not create a workspace"
     );
