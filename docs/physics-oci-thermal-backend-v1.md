@@ -131,9 +131,41 @@ Physics #281, and closed read-only research PR #48.
   test-only environment; any mismatch fails closed. This PR must not
   merge before the common verifier is accepted into the base branch
   and the temporary cross-Draft fetch is replaced with the local
-  canonical script. The independently edited `tests/phase5_thermal_vv.rs`
-  in both Drafts also needs integration conflict review before merge.
+  canonical script.
+  **Phase 5 same-file conflict was resolved:** this PR restored
+  `tests/phase5_thermal_vv.rs` to its exact main version and introduced
+  `tests/physics_oci_phase5_vv.rs` for OCI-only CSV+Exodus; PR #38
+  retains ownership of Conda CSV+Exodus source-evidence changes.
 
 Local source-build backend evaluation, default profile switching,
 merging, release, Physics consumer migration, scientific signoff and
 SOL contract acceptance are all outside the approved scope.
+
+## Container lifetime hardening (Draft only, 2026-11-09)
+
+The OCI process runner creates an atomic, OS-random 128-bit name and a
+mode-0700 private temporary CID directory before Docker launch.
+It passes both `--name` and `--cidfile` and never uses a shared
+predictable PID/counter CID filename. After the Docker CLI exits or
+is killed at timeout, it checks `docker container ls --all --no-trunc`
+for that exact name; recorded CID and listed ID must agree. If any
+orphan remains, it is forcibly removed by **the private random name**
+and the invocation is still **reported as failure**, including when
+the CID file was not written. A failed cleanup or ambiguous CID
+leaves execution status UNKNOWN, never PASS or a replay permission.
+Cleanup commands are bounded by a 10-second timeout; CID symlinks and
+invalid contents are rejected before use.
+
+The separate `tests/physics_oci_lifecycle.rs` uses a fake Docker CLI,
+requiring successful normal cleanup, timeout orphan removal, orphan
+with missing CID, failed forced removal and forged/symlink CID rejection.
+The native OCI/SOL P2/P3 and Phase 5 tests still run on the published
+digest under GitHub Actions. Tests in this Draft **do not** certify
+scientific or Conda release equivalence.
+
+**Integration order:** retain Draft #49; review the standalone common
+verifier in Draft #38; after a separately approved merge of #38,
+replace #49's test-only cross-Draft fetch with the repository-local
+canonical verifier, rerun exact-HEAD independent native and CI gates;
+only then review #49's own independent merge approval. No default
+switch, branch ruleset change or Local Build scope is authorized.
