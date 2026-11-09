@@ -4,6 +4,7 @@ use crate::backend::{
 };
 use crate::hit::validate_generated_structure;
 use crate::ir::MooseOperator;
+use crate::physics_oci;
 use crate::realization_v02::translate_steady_thermal_v02;
 use sol_adapter_protocol::{
     protocol_diagnostic, ActionExecutionReport, ActionExecutionState,
@@ -33,18 +34,51 @@ static RUN_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub struct ExecutionEnvironment {
     runner: Option<MooseProcessRunner>,
     workspace_root: PathBuf,
+    profile_error: Option<String>,
 }
 
 impl ExecutionEnvironment {
     pub fn from_environment() -> Self {
-        let runner = std::env::var_os("SOL_MOOSE_EXECUTABLE")
-            .map(|path| MooseProcessRunner::new(PathBuf::from(path), DEFAULT_BACKEND_TIMEOUT));
+        let profile = std::env::var("SOL_MOOSE_BACKEND_PROFILE").ok();
+        let (runner, profile_error) = match profile.as_deref() {
+            // OCI is the default for the already-supported Thermal 0.2 slice.
+            // Exact-Conda release compatibility remains explicitly selectable,
+            // not an automatic fallback when OCI is missing or incompatible.
+            Some("conda") => (
+                std::env::var_os("SOL_MOOSE_EXECUTABLE").map(|path| {
+                    MooseProcessRunner::new(PathBuf::from(path), DEFAULT_BACKEND_TIMEOUT)
+                }),
+                None,
+            ),
+            None | Some(physics_oci::PROFILE) => {
+                if std::env::var_os("SOL_MOOSE_EXECUTABLE").is_some()
+                    || std::env::var_os("SOL_MOOSE_CONDA_PREFIX").is_some()
+                {
+                    (
+                        None,
+                        Some(
+                            "Physics OCI default/profile cannot mix Conda executable or prefix; select SOL_MOOSE_BACKEND_PROFILE=conda explicitly".to_owned(),
+                        ),
+                    )
+                } else {
+                    (
+                        Some(MooseProcessRunner::physics_oci(DEFAULT_BACKEND_TIMEOUT)),
+                        None,
+                    )
+                }
+            }
+            Some(other) => (
+                None,
+                Some(format!("unsupported MOOSE backend profile: {other}")),
+            ),
+        };
         let workspace_root = std::env::var_os("SOL_MOOSE_WORKSPACE_ROOT")
             .map(PathBuf::from)
             .unwrap_or_else(|| std::env::temp_dir().join("sol-adaptor-moose-runtime"));
         Self {
             runner,
             workspace_root,
+            profile_error,
         }
     }
 
@@ -56,6 +90,7 @@ impl ExecutionEnvironment {
         Self {
             runner: Some(MooseProcessRunner::new(executable, timeout)),
             workspace_root: workspace_root.into(),
+            profile_error: None,
         }
     }
 
@@ -63,6 +98,7 @@ impl ExecutionEnvironment {
         Self {
             runner: None,
             workspace_root: workspace_root.into(),
+            profile_error: None,
         }
     }
 
@@ -356,11 +392,20 @@ impl ExecutionEnvironment {
     }
 
     fn backend_readiness(&self) -> BackendReadiness {
+        if let Some(error) = &self.profile_error {
+            return BackendReadiness::Incompatible(error.clone());
+        }
         let Some(runner) = self.runner.as_ref() else {
             return BackendReadiness::Unavailable(
                 "SOL_MOOSE_EXECUTABLE is not configured for the current adapter process".to_owned(),
             );
         };
+        if runner.is_physics_oci() {
+            return match physics_oci::verify_local_image() {
+                Ok(_) => BackendReadiness::Ready,
+                Err(error) => classify_backend_error(error),
+            };
+        }
         let Some(prefix) = runner.inferred_conda_prefix() else {
             return BackendReadiness::Incompatible(format!(
                 "exact MOOSE package identity cannot be inferred from executable `{}`",
@@ -561,13 +606,21 @@ fn completed_execution_response(
                 extensions: Default::default(),
             },
             OpaqueExecutionReference {
-                namespace: "moose.package".to_owned(),
-                reference: PHASE1_MOOSE_PACKAGE_FILENAME.to_owned(),
+                namespace: if runner.is_physics_oci() {
+                    "moose.oci.image".to_owned()
+                } else {
+                    "moose.package".to_owned()
+                },
+                reference: if runner.is_physics_oci() {
+                    physics_oci::IMAGE.to_owned()
+                } else {
+                    PHASE1_MOOSE_PACKAGE_FILENAME.to_owned()
+                },
                 extensions: Default::default(),
             },
             OpaqueExecutionReference {
                 namespace: "moose.executable".to_owned(),
-                reference: runner.executable().display().to_string(),
+                reference: runner.effective_executable(),
                 extensions: Default::default(),
             },
             OpaqueExecutionReference {

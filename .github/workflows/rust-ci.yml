@@ -6,6 +6,13 @@ on:
     branches:
       - main
       - 'a0.1-*'
+  workflow_dispatch:
+    inputs:
+      run_conda_compatibility:
+        description: "Explicitly opt in to deferred exact-Conda compatibility checks"
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -400,20 +407,212 @@ jobs:
           path: target/thermal-offline-results/
           retention-days: 30
           if-no-files-found: warn
-  moose-backend:
+
+  # Physics OCI is the Thermal 0.2 default and mandatory Native gate.
+  # Exact-Conda remains a distinct historical compatibility check, suspended
+  # on routine PR/push runs and available only by explicit manual opt-in.
+  physics-oci-thermal:
+    name: Physics OCI native Thermal + pinned SOL Runtime parity
     needs: [scope, rust]
     if: needs.scope.outputs.backend_needed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      SOL_MOOSE_NATIVE_OCI_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Verify exact backend-source checkout
+      - name: Verify exact candidate commit
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.80.0
+      - name: Pull exact published Physics Runtime (not INL Conda)
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='ghcr.io/hyungseonsong-plasma/physics-runtime@sha256:cda9f0d09a17aed5fa606e97d1ee5c3450f7280536cec2e5c635402bb07d972c'
+          docker pull "$image"
+          test "$(docker image inspect "$image" --format '{{ index .Config.Labels "io.physics.moose.sha" }}')" = '9f388366ccf38b9c34542ec5561198249fde0ac9'
+          test "$(docker image inspect "$image" --format '{{ index .Config.Labels "io.physics.build-base.ref" }}')" = 'ghcr.io/hyungseonsong-plasma/physics-build-base@sha256:2c3352da4f5c1b2ae98475fc01463ad0cdbc6ce7d221ce55055ddea152182008'
+      - name: Execute real Adapter OCI Thermal P2/P3 (direct path)
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
+          export SOL_MOOSE_WORKSPACE_ROOT="$PWD/target/physics-oci-native"
+          cargo test --test physics_oci_native --locked -- --nocapture
+          test -s target/physics-oci-evidence/direct-result.json
+          test -s target/physics-oci-native/runs/direct-thermal-oci-001/input.i
+          grep -Fq 'Solve Converged!' target/physics-oci-native/runs/direct-thermal-oci-001/stdout.log
+      - uses: actions/checkout@v4
+        with:
+          repository: HyungseonSong-plasma/simulation-ontology
+          ref: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          path: .sol-v02-runtime
+          persist-credentials: false
+      - name: Run actual pinned SOL Runtime -> Adapter -> Physics OCI P2/P3
+        shell: bash
+        env:
+          SOL_SHA: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          unset SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
+          test "$(git -C .sol-v02-runtime rev-parse HEAD)" = "$SOL_SHA"
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          cargo build --locked --bin sol-adaptor-moose
+          cargo build --locked --manifest-path .sol-v02-runtime/examples/external-runtime-v02/Cargo.toml
+          mkdir -p target/physics-oci-sol-consumer
+          jq -n --slurpfile plan tests/fixtures/sol/0.2/thermal-realization-request.json \
+            '{target:"moose",required_capabilities:["thermal.steady_conduction"],plan_request:$plan[0]}' \
+            > target/physics-oci-sol-consumer/request.json
+          consumer="$PWD/.sol-v02-runtime/examples/external-runtime-v02/target/debug/sol-external-runtime-v02-consumer"
+          adapter="$PWD/target/debug/sol-adaptor-moose"
+          export SOL_MOOSE_WORKSPACE_ROOT="$PWD/target/physics-oci-sol-workspace"
+          "$consumer" run "$adapter" target/physics-oci-sol-consumer/request.json \
+            > target/physics-oci-sol-consumer/result.json \
+            2> target/physics-oci-sol-consumer/stderr.log
+          python3 scripts/verify_physics_oci_sol_thermal_parity.py \
+            --external-result target/physics-oci-sol-consumer/result.json \
+            --external-workspace target/physics-oci-sol-workspace \
+            --direct-input target/physics-oci-native/runs/direct-thermal-oci-001/input.i \
+            --request target/physics-oci-sol-consumer/request.json \
+            --adapter-sha "$HEAD_SHA" --runtime-sha "$SOL_SHA" \
+            --output target/physics-oci-sol-consumer/parity.json
+      - name: Verify integrated shared Thermal verifier from merged PR 38
+        shell: bash
+        run: |
+          set -euo pipefail
+          # PR #38 is integrated in this branch's Git history.
+          test -s scripts/verify_thermal_same_run_evidence.py
+          actual_blob=$(git hash-object scripts/verify_thermal_same_run_evidence.py)
+          test "$actual_blob" = '35029268d543e37302a52a582d3e19c6a6c7782d'
+          echo "THERMAL_SOURCE_VERIFIER=$PWD/scripts/verify_thermal_same_run_evidence.py" >> "$GITHUB_ENV"
+          echo "INTEGRATED_VERIFIER_LOCAL_BLOB=PASS blob=$actual_blob"
+      - name: OCI Phase5 independent numerical V&V and same-run CSV/Exodus field
         shell: bash
         env:
           EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+        run: |
+          set -euo pipefail
+          unset SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
+          cargo test --test physics_oci_phase5_vv --locked -- --nocapture
+          root=target/physics-oci-phase5/phase5-vv-evidence
+          test -s "$root/thermal-vv.json"
+          test -s "$root/runs/thermal-constant-field-vv/input_out.csv"
+          test -s "$root/runs/thermal-constant-field-vv/input_out.e"
+          python3 -m pip install --disable-pip-version-check 'scipy==1.14.1'
+          python3 "$THERMAL_SOURCE_VERIFIER" \
+            --evidence-root "$root" \
+            --required-backend-profile physics_oci_thermal_v1 \
+            --output "$root/thermal-same-run-source-evidence.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path(
+              "target/physics-oci-phase5/phase5-vv-evidence/thermal-same-run-source-evidence.json"
+          ).read_text())
+          assert r["status"] == "NATIVE_SOURCE_SCALAR_FIELD_PAIR_VERIFIED"
+          assert r["canonical_result_semantics"] == "NOT_EVALUATED"
+          assert r["science_owner_signoff"] == "PENDING"
+          assert r["adapter_protocol_result_0_3"] == "NOT_IMPLEMENTED"
+          assert r["source_checkout_state"] == "EXACT_HEAD_OBSERVED_IN_CI"
+          print("OCI_THERMAL_NUMERICAL_SOURCE_VV=PASS; SCIENCE_SIGNOFF=PENDING")
+          PY
+      - name: Same-run CSV mutation must fail source-level V&V
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv, shutil
+          from pathlib import Path
+          source = Path("target/physics-oci-phase5/phase5-vv-evidence")
+          altered = Path("target/physics-oci-phase5-negative/phase5-vv-evidence")
+          shutil.copytree(source, altered)
+          csvpath = altered / "runs/thermal-constant-field-vv/input_out.csv"
+          with csvpath.open(newline="") as file:
+              rows = list(csv.reader(file))
+          index = rows[0].index("temperature_max_vv")
+          rows[-1][index] = str(float(rows[-1][index]) + 5.0)
+          with csvpath.open("w", newline="") as file:
+              writer = csv.writer(file)
+              writer.writerows(rows)
+          PY
+          if python3 "$THERMAL_SOURCE_VERIFIER" \
+            --evidence-root target/physics-oci-phase5-negative/phase5-vv-evidence \
+            --required-backend-profile physics_oci_thermal_v1 \
+            --output target/physics-oci-phase5-negative/should-not-exist.json \
+            >target/physics-oci-phase5-negative/negative.log 2>&1; then
+            echo 'OCI_NUMERICAL_MUTATION_UNEXPECTED_PASS' >&2
+            exit 1
+          fi
+          test ! -e target/physics-oci-phase5-negative/should-not-exist.json
+          grep -Fq 'scalar/field numerical extrema differ' \
+            target/physics-oci-phase5-negative/negative.log
+          echo 'OCI_NUMERICAL_MUTATION=REJECTED_AS_EXPECTED'
+      - name: Negative mutation must not pass parity
+        shell: bash
+        env:
+          SOL_SHA: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          cp target/physics-oci-native/runs/direct-thermal-oci-001/input.i target/physics-oci-sol-consumer/tampered.i
+          printf '\n# deliberate mismatch\n' >> target/physics-oci-sol-consumer/tampered.i
+          if python3 scripts/verify_physics_oci_sol_thermal_parity.py \
+            --external-result target/physics-oci-sol-consumer/result.json \
+            --external-workspace target/physics-oci-sol-workspace \
+            --direct-input target/physics-oci-sol-consumer/tampered.i \
+            --request target/physics-oci-sol-consumer/request.json \
+            --adapter-sha "$HEAD_SHA" --runtime-sha "$SOL_SHA" \
+            --output target/physics-oci-sol-consumer/should-not-exist.json \
+            > target/physics-oci-sol-consumer/negative.log 2>&1; then
+            echo 'INVALID_PARITY_UNEXPECTED_PASS' >&2
+            exit 1
+          fi
+          grep -Fq 'different HIT bytes' target/physics-oci-sol-consumer/negative.log
+          test ! -e target/physics-oci-sol-consumer/should-not-exist.json
+          echo 'OCI_PARITY_NEGATIVE_REJECTED'
+      - name: Persist exact-backend execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physics-oci-thermal-native-parity-evidence
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            target/physics-oci-phase5/phase5-vv-evidence/thermal-vv.json
+            target/physics-oci-phase5/phase5-vv-evidence/thermal-same-run-source-evidence.json
+            target/physics-oci-phase5/phase5-vv-evidence/runs/*/input.i
+            target/physics-oci-phase5/phase5-vv-evidence/runs/*/*.csv
+            target/physics-oci-phase5/phase5-vv-evidence/runs/*/*.e
+            target/physics-oci-phase5/phase5-vv-evidence/runs/*/*.log
+            target/physics-oci-phase5-negative/negative.log
+            target/physics-oci-evidence/*.json
+            target/physics-oci-native/runs/*/input.i
+            target/physics-oci-native/runs/*/*.log
+            target/physics-oci-sol-consumer/*
+            target/physics-oci-sol-workspace/runs/*/input.i
+            target/physics-oci-sol-workspace/runs/*/*.log
+  # Deferred, explicitly selected only; no longer blocks the default OCI
+  # Thermal CI. Failure remains a real FAIL when deliberately requested.
+  moose-backend:
+    name: Deferred exact-Conda release compatibility (manual only)
+    needs: [scope, rust]
+    if: github.event_name == 'workflow_dispatch' && inputs.run_conda_compatibility == true && needs.scope.outputs.backend_needed == 'true'
+    runs-on: ubuntu-latest
+    env:
+      SOL_MOOSE_BACKEND_PROFILE: conda
+    steps:
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.80.0
@@ -491,25 +690,6 @@ jobs:
           cargo test --test phase5_thermal_vv --locked -- --nocapture 2>&1 \
             | tee target/phase5-vv-evidence/test.log
           test -f target/phase5-vv-evidence/thermal-vv.json
-      - name: Verify same-run source scalar and native Exodus T field
-        shell: bash
-        env:
-          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          set -euo pipefail
-          python3 -m pip install --disable-pip-version-check 'scipy==1.14.1'
-          python3 scripts/verify_thermal_same_run_evidence.py \
-            --evidence-root target/phase5-vv-evidence \
-            --output target/phase5-vv-evidence/thermal-same-run-source-evidence.json
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          r=json.loads(Path('target/phase5-vv-evidence/thermal-same-run-source-evidence.json').read_text())
-          assert r['status']=='NATIVE_SOURCE_SCALAR_FIELD_PAIR_VERIFIED'
-          assert r['canonical_result_semantics']=='NOT_EVALUATED'
-          assert r['science_owner_signoff']=='PENDING'
-          assert r['adapter_protocol_result_0_3']=='NOT_IMPLEMENTED'
-          PY
       - name: Preserve backend evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -541,9 +721,7 @@ jobs:
             target/phase5-conformance/adapter-workspace/runs/*/stderr.log
             target/phase5-vv-evidence/test.log
             target/phase5-vv-evidence/thermal-vv.json
-            target/phase5-vv-evidence/thermal-same-run-source-evidence.json
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/input.i
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/*.csv
-            target/phase5-vv-evidence/runs/thermal-constant-field-vv/*.e
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/stdout.log
             target/phase5-vv-evidence/runs/thermal-constant-field-vv/stderr.log

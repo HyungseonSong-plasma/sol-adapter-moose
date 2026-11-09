@@ -1,3 +1,4 @@
+use crate::physics_oci;
 use serde_json::Value;
 use std::fmt::{Display, Formatter};
 use std::fs;
@@ -153,6 +154,7 @@ impl ProcessOutput {
 pub struct MooseProcessRunner {
     executable: PathBuf,
     timeout: Duration,
+    physics_oci: bool,
 }
 
 impl MooseProcessRunner {
@@ -160,6 +162,27 @@ impl MooseProcessRunner {
         Self {
             executable: executable.into(),
             timeout,
+            physics_oci: false,
+        }
+    }
+
+    pub fn physics_oci(timeout: Duration) -> Self {
+        Self {
+            executable: PathBuf::from("docker"),
+            timeout,
+            physics_oci: true,
+        }
+    }
+
+    pub fn is_physics_oci(&self) -> bool {
+        self.physics_oci
+    }
+
+    pub fn effective_executable(&self) -> String {
+        if self.physics_oci {
+            physics_oci::EXECUTABLE.to_owned()
+        } else {
+            self.executable.display().to_string()
         }
     }
 
@@ -168,6 +191,9 @@ impl MooseProcessRunner {
     }
 
     pub fn inferred_conda_prefix(&self) -> Option<PathBuf> {
+        if self.physics_oci {
+            return None;
+        }
         let bin = self.executable.parent()?;
         if bin.file_name().and_then(|name| name.to_str()) != Some("bin") {
             return None;
@@ -192,60 +218,99 @@ impl MooseProcessRunner {
         args: &[&str],
         working_dir: Option<&Path>,
     ) -> Result<ProcessOutput, BackendError> {
-        let mut command = Command::new(&self.executable);
+        let lease = if self.physics_oci {
+            Some(physics_oci::OciContainerLease::new()?)
+        } else {
+            None
+        };
+        let mut command = if let Some(lease) = lease.as_ref() {
+            physics_oci::docker_command(
+                args,
+                working_dir,
+                lease.cid_file(),
+                lease.container_name(),
+            )?
+        } else {
+            let mut command = Command::new(&self.executable);
+            command.args(args);
+            if let Some(working_dir) = working_dir {
+                command.current_dir(working_dir);
+            }
+            command
+        };
         command
-            .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        if let Some(working_dir) = working_dir {
-            command.current_dir(working_dir);
-        }
 
-        let mut child = command.spawn().map_err(|error| BackendError::Spawn {
-            executable: self.executable.clone(),
-            detail: error.to_string(),
-        })?;
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| BackendError::Process("stdout pipe unavailable".to_owned()))?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| BackendError::Process("stderr pipe unavailable".to_owned()))?;
-        let stdout_reader = thread::spawn(move || read_all(stdout));
-        let stderr_reader = thread::spawn(move || read_all(stderr));
-
-        let deadline = Instant::now() + self.timeout;
-        let (status, timed_out) = loop {
-            match child
-                .try_wait()
-                .map_err(|error| BackendError::Process(error.to_string()))?
-            {
-                Some(status) => break (status, false),
-                None if Instant::now() >= deadline => {
-                    child.kill().map_err(|error| {
-                        BackendError::Process(format!("kill timed-out child: {error}"))
-                    })?;
-                    let status = child.wait().map_err(|error| {
-                        BackendError::Process(format!("wait after timeout: {error}"))
-                    })?;
-                    break (status, true);
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                // Even a failed Docker CLI launch must not leave an orphan.
+                if let Some(lease) = lease {
+                    lease.finalize()?;
                 }
-                None => thread::sleep(Duration::from_millis(20)),
+                return Err(BackendError::Spawn {
+                    executable: self.executable.clone(),
+                    detail: error.to_string(),
+                });
             }
         };
 
-        let stdout = join_reader(stdout_reader, "stdout")?;
-        let stderr = join_reader(stderr_reader, "stderr")?;
-        Ok(ProcessOutput {
-            status_code: exit_code(status),
-            stdout,
-            stderr,
-            timed_out,
-        })
+        // Always finalize the private OCI lease after the CLI is reaped.
+        // In particular, a Docker CLI failure cannot silently preserve an
+        // orphaned container. Cleanup uncertainty overrides a prior success.
+        let outcome = (|| -> Result<ProcessOutput, BackendError> {
+            let stdout = child
+                .stdout
+                .take()
+                .ok_or_else(|| BackendError::Process("stdout pipe unavailable".to_owned()))?;
+            let stderr = child
+                .stderr
+                .take()
+                .ok_or_else(|| BackendError::Process("stderr pipe unavailable".to_owned()))?;
+            let stdout_reader = thread::spawn(move || read_all(stdout));
+            let stderr_reader = thread::spawn(move || read_all(stderr));
+
+            let deadline = Instant::now() + self.timeout;
+            let (status, timed_out) = loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => break (status, false),
+                    Ok(None) if Instant::now() >= deadline => {
+                        // Reap the CLI, then remove and verify the named Docker
+                        // container even if no CID file was successfully written.
+                        let _ = child.kill();
+                        let status = child.wait().map_err(|error| {
+                            BackendError::Process(format!("wait after timeout: {error}"))
+                        })?;
+                        break (status, true);
+                    }
+                    Ok(None) => thread::sleep(Duration::from_millis(20)),
+                    Err(error) => {
+                        return Err(BackendError::Process(format!(
+                            "check Docker/backend process: {error}"
+                        )))
+                    }
+                }
+            };
+
+            let stdout = join_reader(stdout_reader, "stdout")?;
+            let stderr = join_reader(stderr_reader, "stderr")?;
+            Ok(ProcessOutput {
+                status_code: exit_code(status),
+                stdout,
+                stderr,
+                timed_out,
+            })
+        })();
+        if outcome.is_err() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        if let Some(lease) = lease {
+            lease.finalize()?;
+        }
+        outcome
     }
 }
 
