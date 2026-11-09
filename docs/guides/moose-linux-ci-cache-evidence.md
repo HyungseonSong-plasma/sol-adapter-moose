@@ -27,3 +27,15 @@ The cache is identified by Ubuntu runner family, exact MOOSE version/build, acce
 - `PACKAGE_PASS + MPI_PASS + NATIVE_TEST_PASS`: backend CI evidence only; not 0.3 Field or Plasma scientific sign-off.
 
 Never republish a third-party package as an official INL release, silently substitute another MOOSE version, disable native MOOSE tests, or interpret cache restoration as scientific V&V.
+
+## 2026-11-09 direct-source failure and bootstrap verdict
+
+After repeated INL `repodata.json` 502s, PR #43 tested six **exact** direct package archive URLs on the same GitHub-hosted Ubuntu 24.04 runner. The [direct-archive diagnostic](https://github.com/HyungseonSong-plasma/sol-adapter-moose/actions/runs/42605278194) recorded **six of six HTTP HEAD calls timing out after 12 seconds with zero response bytes**; the `moose-inl-direct-head-diagnostic` artifact preserves individual receipts. This is evidence about HEAD availability on that runner and is **not** proof that the server is globally unreachable for all clients, nor that a GET of each archive necessarily fails.
+
+The failed attempt's separate `moose-backend` job remained required. Direct archive URLs therefore cannot currently be treated as a verified fallback. The bounded diagnostic job was removed from subsequent CI to avoid introducing a permanently red **second** gate; its results remain in the immutable run above.
+
+The 2026-11-06 [historical evidence ZIP](https://github.com/HyungseonSong-plasma/sol-adapter-moose/actions/runs/42260284458/artifacts/13525430701) contains **only** `phase1-conda-list.json`, `phase1-package-sha256.txt` and `phase1-moose-conda-meta.json` (which was actually `moose-tools`). It contains **no executable, Conda prefix, or package archives**, so it cannot be promoted into a full cache seed. Its 350-package build-set fingerprint is suitable for detecting drift, not recovering missing source bytes.
+
+The existing `moose-test-repo` OCI images do not satisfy this package identity: its Physics build base is built from `idaholab/moose-dev:2026.06.16` and MOOSE source commit `9f388366ccf38b9c34542ec5561198249fde0ac9`; the Physics runtime uses an OpenMPI layout. None of these references establishes equivalence to `moose=2026.08.12=mpich` Conda archive `d7b2eec6b958f11455c903b70a16ea319b7edb68b4499537313c06785abd05b3`. Do not quietly substitute them as a Phase 1 Linux backend PASS.
+
+**Next real repair condition:** restore authenticated acquisition of the exact INL packages, or obtain an approved, independently checksum-attested, license-reviewed retained copy of the entire 350-archive dependency closure; then generate an immutable `@EXPLICIT` lock and immutable OCI or trusted archive storage, prove cache-independent cold installation, MPI initialization and native Thermal V&V. The existing Actions cache may accelerate repeated attempts *after a verified seed exists*; it cannot resolve a source outage by itself. Until one source is available, classify native provisioning as `INFRA_BLOCKED`, not a solver or scientific PASS.
