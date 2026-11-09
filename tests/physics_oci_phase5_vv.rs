@@ -130,7 +130,7 @@ fn explicit_oci_thermal_scalar_and_exodus_evidence_matches_benchmark() {
         output.stderr_text()
     );
 
-        let field = fs::read_dir(layout.run_dir())
+    let field = fs::read_dir(layout.run_dir())
         .unwrap()
         .filter_map(Result::ok)
         .map(|entry| entry.path())
