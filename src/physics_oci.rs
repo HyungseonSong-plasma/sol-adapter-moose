@@ -200,7 +200,6 @@ pub struct OciContainerLease {
     private_dir: PathBuf,
     cid_file: PathBuf,
     container_name: String,
-    finished: bool,
 }
 
 impl OciContainerLease {
@@ -231,7 +230,6 @@ impl OciContainerLease {
                             cid_file: dir.join("container.cid"),
                             private_dir: dir,
                             container_name,
-                            finished: false,
                         })
                     }
                     Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
@@ -350,7 +348,7 @@ impl OciContainerLease {
     /// is not grounds to ignore a container: the cryptographically random
     /// Docker name permits a name-based orphan search as a second witness.
     /// Any unexpected leftover becomes an error even when removal succeeds.
-    pub fn finalize(mut self) -> Result<(), BackendError> {
+    pub fn finalize(self) -> Result<(), BackendError> {
         let recorded = self.read_cid()?;
         let existing = self.listed_cid()?;
         if let (Some(recorded), Some(existing)) = (&recorded, &existing) {
@@ -377,18 +375,7 @@ impl OciContainerLease {
             context: format!("remove private OCI CID directory {}", self.private_dir.display()),
             detail: e.to_string(),
         })?;
-        self.finished = true;
         Ok(())
     }
 }
 
-impl Drop for OciContainerLease {
-    fn drop(&mut self) {
-        // The caller receives a hard failure on any uncertain lifecycle.
-        // Keep evidence for investigation if state verification failed.
-        // No best-effort kill by a potentially corrupted CID.
-        if !self.finished {
-            // Intentionally preserve the private directory on failure.
-        }
-    }
-}
