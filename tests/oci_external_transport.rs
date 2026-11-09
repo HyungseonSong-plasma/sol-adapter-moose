@@ -162,6 +162,35 @@ fn external_oci_protocol_v02_serialization_and_independent_runs() {
 }
 
 #[test]
+fn external_oci_rejects_failed_probe_without_workspace_creation() {
+    let Some(_) = std::env::var_os("SOL_MOOSE_OCI_EXECUTABLE") else {
+        return;
+    };
+    let root =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/oci-external-failed-probe");
+    let _ = fs::remove_dir_all(&root);
+    let output = invoke(
+        &[rpc("execute_plan", serde_json::from_str(REQUEST).unwrap(), 81)],
+        &root,
+        std::ffi::OsStr::new("/usr/bin/false"),
+        APPROVED_CANDIDATE_IMAGE,
+        APPROVED_CANDIDATE_IMAGE,
+    );
+    let frames = parse(output);
+    assert_eq!(frames.len(), 1);
+    let response = &frames[0];
+    let mut result = ExecutePlanResponseV02::from_json(
+        &serde_json::to_string(payload(response)).unwrap(),
+    )
+    .unwrap();
+    let request = ExecutePlanRequestV02::from_json(REQUEST).unwrap();
+    result.validate_against(&request).unwrap();
+    assert_eq!(result.execution, ExecutionOutcome::Rejected);
+    assert!(result.provenance.is_none());
+    assert!(!root.exists(), "failed probe created workspace");
+}
+
+#[test]
 fn external_oci_launch_rejects_digest_mismatch_before_any_side_effects() {
     let Some(executable) = std::env::var_os("SOL_MOOSE_OCI_EXECUTABLE") else {
         return;
