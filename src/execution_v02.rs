@@ -3,8 +3,8 @@ use crate::backend::{
     PHASE1_MOOSE_PACKAGE_FILENAME,
 };
 use crate::hit::validate_generated_structure;
-use crate::physics_oci;
 use crate::ir::MooseOperator;
+use crate::physics_oci;
 use crate::realization_v02::translate_steady_thermal_v02;
 use sol_adapter_protocol::{
     protocol_diagnostic, ActionExecutionReport, ActionExecutionState,
@@ -51,12 +51,23 @@ impl ExecutionEnvironment {
                 if std::env::var_os("SOL_MOOSE_EXECUTABLE").is_some()
                     || std::env::var_os("SOL_MOOSE_CONDA_PREFIX").is_some()
                 {
-                    (None, Some("Physics OCI profile cannot mix Conda executable or prefix".to_owned()))
+                    (
+                        None,
+                        Some(
+                            "Physics OCI profile cannot mix Conda executable or prefix".to_owned(),
+                        ),
+                    )
                 } else {
-                    (Some(MooseProcessRunner::physics_oci(DEFAULT_BACKEND_TIMEOUT)), None)
+                    (
+                        Some(MooseProcessRunner::physics_oci(DEFAULT_BACKEND_TIMEOUT)),
+                        None,
+                    )
                 }
             }
-            Some(other) => (None, Some(format!("unsupported MOOSE backend profile: {other}"))),
+            Some(other) => (
+                None,
+                Some(format!("unsupported MOOSE backend profile: {other}")),
+            ),
         };
         let workspace_root = std::env::var_os("SOL_MOOSE_WORKSPACE_ROOT")
             .map(PathBuf::from)
