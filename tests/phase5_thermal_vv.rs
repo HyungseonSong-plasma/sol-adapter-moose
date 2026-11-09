@@ -1,7 +1,6 @@
 use serde_json::json;
 use sol_adapter_protocol::ValidatePlanRequestV02;
 use sol_adaptor_moose::backend::{execute_backend_input, MooseProcessRunner, WorkspaceLayout};
-use sol_adaptor_moose::physics_oci::PROFILE as OCI_PROFILE;
 use sol_adaptor_moose::realization_v02::translate_steady_thermal_v02;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,7 +11,7 @@ const RUN_KEY: &str = "thermal-constant-field-vv";
 const EXPECTED_TEMPERATURE_K: f64 = 400.0;
 const MAX_ABS_ERROR_TOLERANCE_K: f64 = 1.0e-8;
 
-fn with_vv_only_instrumentation(production_input: &str, native_exodus: bool) -> String {
+fn with_vv_only_instrumentation(production_input: &str) -> String {
     let postprocessors = r#"[Postprocessors]
   [temperature_max_vv]
     type = NodalExtremeValue
@@ -33,12 +32,7 @@ fn with_vv_only_instrumentation(production_input: &str, native_exodus: bool) -> 
 
     let instrumented =
         production_input.replacen("[Outputs]\n", &format!("{postprocessors}[Outputs]\n"), 1);
-    if native_exodus {
-        instrumented.replacen("  exodus = false\n", "  exodus = true\n  csv = true\n", 1)
-    } else {
-        // Historical pinned Conda benchmark remains unchanged.
-        instrumented.replacen("  exodus = false\n", "  exodus = false\n  csv = true\n", 1)
-    }
+    instrumented.replacen("  exodus = false\n", "  exodus = false\n  csv = true\n", 1)
 }
 
 fn find_single_csv(run_dir: &Path) -> PathBuf {
@@ -92,22 +86,10 @@ fn parse_extremes(csv_path: &Path) -> (f64, f64) {
 
 #[test]
 fn steady_thermal_slice_matches_predeclared_constant_field_benchmark() {
-    let is_oci = std::env::var("SOL_MOOSE_BACKEND_PROFILE").ok().as_deref() == Some(OCI_PROFILE);
-    let executable = std::env::var_os("SOL_MOOSE_EXECUTABLE");
-    if !is_oci && executable.is_none() {
-        eprintln!("SOL_MOOSE_EXECUTABLE is unset; historical Conda Phase 5 V&V is skipped");
+    let Some(executable) = std::env::var_os("SOL_MOOSE_EXECUTABLE") else {
+        eprintln!("SOL_MOOSE_EXECUTABLE is unset; Phase 5 numerical V&V is skipped");
         return;
-    }
-    if is_oci {
-        assert!(
-            executable.is_none(),
-            "OCI V&V cannot mix a Conda executable"
-        );
-        assert!(
-            std::env::var_os("SOL_MOOSE_CONDA_PREFIX").is_none(),
-            "OCI V&V cannot mix a Conda prefix"
-        );
-    }
+    };
 
     let request = ValidatePlanRequestV02::from_json(REQUEST).unwrap();
     let model = translate_steady_thermal_v02(&request).unwrap();
@@ -116,7 +98,7 @@ fn steady_thermal_slice_matches_predeclared_constant_field_benchmark() {
     // V&V instrumentation is deliberately appended only in this test. It is not part of the
     // canonical SOL contract, RealizationSpec mapping, adapter-local production IR, or Protocol
     // result semantics.
-    let input = with_vv_only_instrumentation(&production_input, is_oci);
+    let input = with_vv_only_instrumentation(&production_input);
     assert!(!production_input.contains("NodalExtremeValue"));
     assert!(!production_input.contains("csv = true"));
     assert!(input.contains("type = NodalExtremeValue"));
@@ -124,19 +106,11 @@ fn steady_thermal_slice_matches_predeclared_constant_field_benchmark() {
     assert!(input.contains("value_type = min"));
     assert!(input.contains("csv = true"));
 
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(if is_oci {
-        "target/physics-oci-phase5/phase5-vv-evidence"
-    } else {
-        "target/phase5-vv-evidence"
-    });
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/phase5-vv-evidence");
     let layout = WorkspaceLayout::new(&root, RUN_KEY).unwrap();
     let _ = fs::remove_dir_all(layout.run_dir());
 
-    let runner = if is_oci {
-        MooseProcessRunner::physics_oci(Duration::from_secs(120))
-    } else {
-        MooseProcessRunner::new(PathBuf::from(executable.unwrap()), Duration::from_secs(120))
-    };
+    let runner = MooseProcessRunner::new(PathBuf::from(executable), Duration::from_secs(120));
     let output = execute_backend_input(&runner, &layout, &input).unwrap();
     assert!(
         output.success(),
@@ -145,21 +119,6 @@ fn steady_thermal_slice_matches_predeclared_constant_field_benchmark() {
         output.timed_out,
         output.stderr_text()
     );
-
-    if is_oci {
-        let field = fs::read_dir(layout.run_dir())
-            .unwrap()
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("e"))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            field.len(),
-            1,
-            "OCI V&V requires exactly one native Exodus field"
-        );
-        assert!(fs::metadata(&field[0]).unwrap().len() > 1024);
-    }
 
     let csv_path = find_single_csv(&layout.run_dir());
     let (observed_min_k, observed_max_k) = parse_extremes(&csv_path);
@@ -183,8 +142,6 @@ fn steady_thermal_slice_matches_predeclared_constant_field_benchmark() {
         "acceptance": "max(abs(Tmin-400 K), abs(Tmax-400 K)) <= 1e-8 K",
         "instrumentation": "backend_owned_vv_only_nodal_extreme_value_csv",
         "canonical_result_semantics_claimed": false,
-        "backend_profile": if is_oci { OCI_PROFILE } else { "conda_exact_moose" },
-        "exodus_field_required": is_oci,
     });
     fs::create_dir_all(&root).unwrap();
     fs::write(
