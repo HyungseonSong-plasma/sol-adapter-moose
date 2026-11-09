@@ -398,7 +398,7 @@ impl ExecutionEnvironment {
 
     fn backend_readiness(&self) -> BackendReadiness {
         let Some(runner) = self.runner.as_ref() else {
-            let selected_executable = match self.backend_identity {
+            let selected_executable = match &self.backend_identity {
                 BackendIdentity::ExactCondaPhase1 => "SOL_MOOSE_EXECUTABLE",
                 BackendIdentity::OfficialOciCandidate(_) => "SOL_MOOSE_OCI_EXECUTABLE",
             };
