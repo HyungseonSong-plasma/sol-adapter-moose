@@ -60,6 +60,7 @@ fn docker_command_has_exact_no_pull_no_network_no_shell_contract() {
         &["--check-input", "-i", "input.i"],
         None,
         Path::new("/tmp/bounded-oci-cid-test"),
+        "sol-adaptor-moose-oci-00000000000000000000000000000000",
     )
     .unwrap();
     let args: Vec<_> = command
