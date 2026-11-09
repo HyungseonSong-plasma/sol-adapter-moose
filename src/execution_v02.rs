@@ -4,6 +4,7 @@ use crate::backend::{
 };
 use crate::hit::validate_generated_structure;
 use crate::ir::MooseOperator;
+use crate::official_moose_oci;
 use crate::physics_oci;
 use crate::realization_v02::translate_steady_thermal_v02;
 use sol_adapter_protocol::{
@@ -60,6 +61,26 @@ impl ExecutionEnvironment {
                 } else {
                     (
                         Some(MooseProcessRunner::physics_oci(DEFAULT_BACKEND_TIMEOUT)),
+                        None,
+                    )
+                }
+            }
+            Some(official_moose_oci::PROFILE) => {
+                if std::env::var_os("SOL_MOOSE_EXECUTABLE").is_some()
+                    || std::env::var_os("SOL_MOOSE_CONDA_PREFIX").is_some()
+                {
+                    (
+                        None,
+                        Some(
+                            "Official MOOSE OCI profile cannot mix Conda executable or prefix"
+                                .to_owned(),
+                        ),
+                    )
+                } else {
+                    (
+                        Some(MooseProcessRunner::official_moose_oci(
+                            DEFAULT_BACKEND_TIMEOUT,
+                        )),
                         None,
                     )
                 }
@@ -403,6 +424,12 @@ impl ExecutionEnvironment {
                 Err(error) => classify_backend_error(error),
             };
         }
+        if runner.is_official_moose_oci() {
+            return match official_moose_oci::verify_local_image() {
+                Ok(_) => BackendReadiness::Ready,
+                Err(error) => classify_backend_error(error),
+            };
+        }
         let Some(prefix) = runner.inferred_conda_prefix() else {
             return BackendReadiness::Incompatible(format!(
                 "exact MOOSE package identity cannot be inferred from executable `{}`",
@@ -603,16 +630,15 @@ fn completed_execution_response(
                 extensions: Default::default(),
             },
             OpaqueExecutionReference {
-                namespace: if runner.is_physics_oci() {
+                namespace: if runner.oci_image().is_some() {
                     "moose.oci.image".to_owned()
                 } else {
                     "moose.package".to_owned()
                 },
-                reference: if runner.is_physics_oci() {
-                    physics_oci::IMAGE.to_owned()
-                } else {
-                    PHASE1_MOOSE_PACKAGE_FILENAME.to_owned()
-                },
+                reference: runner
+                    .oci_image()
+                    .unwrap_or(PHASE1_MOOSE_PACKAGE_FILENAME)
+                    .to_owned(),
                 extensions: Default::default(),
             },
             OpaqueExecutionReference {

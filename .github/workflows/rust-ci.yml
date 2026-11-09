@@ -448,6 +448,121 @@ jobs:
             target/physics-oci-sol-consumer/*
             target/physics-oci-sol-workspace/runs/*/input.i
             target/physics-oci-sol-workspace/runs/*/*.log
+  official-moose-oci-thermal:
+    name: Official MOOSE OCI native Thermal + pinned SOL Runtime parity
+    needs: [scope, rust]
+    if: needs.scope.outputs.backend_needed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      SOL_MOOSE_BACKEND_PROFILE: official_moose_oci_thermal_v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact candidate commit
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.80.0
+      - name: Pull exact published official MOOSE OCI (not INL Conda)
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='idaholab/moose@sha256:47fc6c5bff5e86869e7c467f999e9585ece13af9ffd1f580fef5369728a93452'
+          docker pull "$image"
+          test "$(docker image inspect "$image" --format '{{ .Id }}')" = 'sha256:8e2d6d65ef05e3a7deb15fe29d5475c95f67a50b9d5dd265b74fa435d382ad96'
+          test "$(docker image inspect "$image" --format '{{ index .Config.Labels "moose-openmpi-x86_64.moose.sha" }}')" = '167ee97da204df5e8643695e18b9b28910f0014b'
+      - name: Execute real Adapter OCI Thermal P2/P3 (direct path)
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
+          export SOL_MOOSE_WORKSPACE_ROOT="$PWD/target/official-moose-oci-native"
+          cargo test --test official_moose_oci_native --locked -- --nocapture
+          test -s target/official-moose-oci-evidence/direct-result.json
+          test -s target/official-moose-oci-native/runs/direct-thermal-official-oci-001/input.i
+          grep -Fq 'Solve Converged!' target/official-moose-oci-native/runs/direct-thermal-official-oci-001/stdout.log
+      - uses: actions/checkout@v4
+        with:
+          repository: HyungseonSong-plasma/simulation-ontology
+          ref: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          path: .sol-v02-runtime
+          persist-credentials: false
+      - name: Run actual pinned SOL Runtime -> Adapter -> Official MOOSE OCI P2/P3
+        shell: bash
+        env:
+          SOL_SHA: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          unset SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
+          test "$(git -C .sol-v02-runtime rev-parse HEAD)" = "$SOL_SHA"
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          cargo build --locked --bin sol-adaptor-moose
+          cargo build --locked --manifest-path .sol-v02-runtime/examples/external-runtime-v02/Cargo.toml
+          mkdir -p target/official-moose-oci-sol-consumer
+          jq -n --slurpfile plan tests/fixtures/sol/0.2/thermal-realization-request.json \
+            '{target:"moose",required_capabilities:["thermal.steady_conduction"],plan_request:$plan[0]}' \
+            > target/official-moose-oci-sol-consumer/request.json
+          consumer="$PWD/.sol-v02-runtime/examples/external-runtime-v02/target/debug/sol-external-runtime-v02-consumer"
+          adapter="$PWD/target/debug/sol-adaptor-moose"
+          export SOL_MOOSE_WORKSPACE_ROOT="$PWD/target/official-moose-oci-sol-workspace"
+          "$consumer" run "$adapter" target/official-moose-oci-sol-consumer/request.json \
+            > target/official-moose-oci-sol-consumer/result.json \
+            2> target/official-moose-oci-sol-consumer/stderr.log
+          python3 scripts/verify_official_moose_oci_sol_thermal_parity.py \
+            --external-result target/official-moose-oci-sol-consumer/result.json \
+            --external-workspace target/official-moose-oci-sol-workspace \
+            --direct-input target/official-moose-oci-native/runs/direct-thermal-official-oci-001/input.i \
+            --direct-receipt target/official-moose-oci-evidence/direct-result.json \
+            --request target/official-moose-oci-sol-consumer/request.json \
+            --adapter-sha "$HEAD_SHA" --runtime-sha "$SOL_SHA" \
+            --output target/official-moose-oci-sol-consumer/parity.json
+      - name: Negative mutation must not pass parity
+        shell: bash
+        env:
+          SOL_SHA: 020e9a979a0b97f2af3cf54758cedf38fecb187a
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          cp target/official-moose-oci-native/runs/direct-thermal-official-oci-001/input.i target/official-moose-oci-sol-consumer/tampered.i
+          printf '\n# deliberate mismatch\n' >> target/official-moose-oci-sol-consumer/tampered.i
+          if python3 scripts/verify_official_moose_oci_sol_thermal_parity.py \
+            --external-result target/official-moose-oci-sol-consumer/result.json \
+            --external-workspace target/official-moose-oci-sol-workspace \
+            --direct-input target/official-moose-oci-sol-consumer/tampered.i \
+            --direct-receipt target/official-moose-oci-evidence/direct-result.json \
+            --request target/official-moose-oci-sol-consumer/request.json \
+            --adapter-sha "$HEAD_SHA" --runtime-sha "$SOL_SHA" \
+            --output target/official-moose-oci-sol-consumer/should-not-exist.json \
+            > target/official-moose-oci-sol-consumer/negative.log 2>&1; then
+            echo 'INVALID_PARITY_UNEXPECTED_PASS' >&2
+            exit 1
+          fi
+          grep -Fq 'different HIT bytes' target/official-moose-oci-sol-consumer/negative.log
+          test ! -e target/official-moose-oci-sol-consumer/should-not-exist.json
+          echo 'OCI_PARITY_NEGATIVE_REJECTED'
+      - name: Persist exact-backend execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-moose-oci-thermal-native-parity-evidence
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            target/official-moose-oci-evidence/*.json
+            target/official-moose-oci-native/runs/*/input.i
+            target/official-moose-oci-native/runs/*/*.log
+            target/official-moose-oci-sol-consumer/*
+            target/official-moose-oci-sol-workspace/runs/*/input.i
+            target/official-moose-oci-sol-workspace/runs/*/*.log
   moose-backend:
     needs: [scope, rust]
     if: needs.scope.outputs.backend_needed == 'true'

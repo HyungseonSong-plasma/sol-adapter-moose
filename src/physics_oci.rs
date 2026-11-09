@@ -113,6 +113,18 @@ pub fn docker_command(
     work_dir: Option<&Path>,
     cid_file: &Path,
 ) -> Result<Command, BackendError> {
+    let mut command = docker_base_command(work_dir, cid_file)?;
+    command.arg(IMAGE);
+    command.args(args);
+    Ok(command)
+}
+
+/// Shared, fail-closed OCI transport flags and workspace rules.
+/// The immutable image and explicit entrypoint are selected by the caller.
+pub(crate) fn docker_base_command(
+    work_dir: Option<&Path>,
+    cid_file: &Path,
+) -> Result<Command, BackendError> {
     let mut command = Command::new("docker");
     command.args([
         "run",
@@ -132,15 +144,15 @@ pub fn docker_command(
         })?;
         if !real.is_dir() {
             return Err(BackendError::Process(
-                "Physics OCI workspace mount is not a directory".to_owned(),
+                "OCI workspace mount is not a directory".to_owned(),
             ));
         }
-        let path = real.to_str().ok_or_else(|| {
-            BackendError::Process("Physics OCI workspace path is not UTF-8".to_owned())
-        })?;
+        let path = real
+            .to_str()
+            .ok_or_else(|| BackendError::Process("OCI workspace path is not UTF-8".to_owned()))?;
         if path.contains(',') || path.contains(':') || path.contains('\n') {
             return Err(BackendError::Process(
-                "Physics OCI workspace path contains an unsupported mount character".to_owned(),
+                "OCI workspace path contains an unsupported mount character".to_owned(),
             ));
         }
         // The OCI runtime drops ALL capabilities. Its default root identity
@@ -165,8 +177,6 @@ pub fn docker_command(
             .arg(format!("type=bind,src={path},dst=/work"))
             .args(["--workdir", "/work"]);
     }
-    command.arg(IMAGE);
-    command.args(args);
     Ok(command)
 }
 
