@@ -300,10 +300,15 @@ jobs:
           mkdir -p target
           "$RUNNER_TEMP/miniforge/bin/conda" list -p "$RUNNER_TEMP/moose-env" --json \
             > target/phase1-conda-list.json
-          metadata=$(find "$RUNNER_TEMP/moose-env/conda-meta" -maxdepth 1 \
-            -name 'moose-*.json' -print -quit)
-          test -n "$metadata"
-          cp "$metadata" target/phase1-moose-conda-meta.json
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.provision_pinned_moose import copy_verified_moose_metadata
+          prefix = Path(os.environ['RUNNER_TEMP']) / 'moose-env'
+          output = Path('target/phase1-moose-conda-meta.json')
+          digest = copy_verified_moose_metadata(prefix, output)
+          print(f'EXACT_MOOSE_METADATA=PASS sha256={digest}')
+          PY
       - name: Verify retained package archive when available
         shell: bash
         run: |
