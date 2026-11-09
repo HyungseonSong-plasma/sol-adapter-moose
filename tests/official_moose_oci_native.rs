@@ -93,7 +93,7 @@ fn actual_pinned_official_moose_oci_thermal_runs_with_adapter_owned_realization(
         "sol_consumer_parity": "NOT_EVALUATED_BY_DIRECT_TEST",
     });
     let evidence_dir =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/physics-oci-evidence");
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/official-moose-oci-evidence");
     fs::create_dir_all(&evidence_dir).unwrap();
     fs::write(
         evidence_dir.join("direct-result.json"),
