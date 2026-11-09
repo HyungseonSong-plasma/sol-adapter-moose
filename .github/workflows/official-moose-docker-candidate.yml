@@ -29,6 +29,31 @@ jobs:
           set -euo pipefail
           python3 experiments/official_moose_docker_probe/probe.py \
             --output target/official-moose-docker-candidate
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.80.0
+      - name: Exercise actual Adapter IR, workspace, Thermal and Phase 5 V&V tests through OCI
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$(cat target/official-moose-docker-candidate/resolved-image.txt)"
+          test "$image" = 'idaholab/moose@sha256:47fc6c5bff5e86869e7c467f999e9585ece13af9ffd1f580fef5369728a93452'
+          install -m 0755 experiments/official_moose_docker_probe/moose_wrapper.sh \
+            "$RUNNER_TEMP/moose-docker-opt"
+          export SOL_MOOSE_EXECUTABLE="$RUNNER_TEMP/moose-docker-opt"
+          export MOOSE_DOCKER_PIN="$image"
+          mkdir -p target/official-moose-docker-candidate/rust
+          cargo test --locked --test moose_ir_check -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/moose-ir-check.log
+          cargo test --locked --test moose_realization_v02_check -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/moose-realization-v02-check.log
+          cargo test --locked --test moose_backend_workspace -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/moose-backend-workspace.log
+          cargo test --locked --test phase5_thermal_vv -- --nocapture 2>&1 \
+            | tee target/official-moose-docker-candidate/rust/phase5-thermal-vv.log
+          test -f target/phase5-vv-evidence/thermal-vv.json
+          cp target/phase5-vv-evidence/thermal-vv.json \
+            target/official-moose-docker-candidate/rust/thermal-vv.json
       - name: Preserve immutable digest, native CLI and numeric test evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -42,3 +67,5 @@ jobs:
             target/official-moose-docker-candidate/*.log
             target/official-moose-docker-candidate/case/*.i
             target/official-moose-docker-candidate/case/*.csv
+            target/official-moose-docker-candidate/rust/*
+            target/phase5-vv-evidence/runs/thermal-constant-field-vv/*.csv
