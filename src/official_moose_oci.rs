@@ -9,8 +9,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 pub const PROFILE: &str = "official_moose_oci_thermal_v1";
-pub const IMAGE: &str = "idaholab/moose@sha256:47fc6c5bff5e86869e7c467f999e9585ece13af9ffd1f580fef5369728a93452";
-pub const CONFIG_ID: &str = "sha256:8e2d6d65ef05e3a7deb15fe29d5475c95f67a50b9d5dd265b74fa435d382ad96";
+pub const IMAGE: &str =
+    "idaholab/moose@sha256:47fc6c5bff5e86869e7c467f999e9585ece13af9ffd1f580fef5369728a93452";
+pub const CONFIG_ID: &str =
+    "sha256:8e2d6d65ef05e3a7deb15fe29d5475c95f67a50b9d5dd265b74fa435d382ad96";
 pub const MOOSE_SOURCE_SHA: &str = "167ee97da204df5e8643695e18b9b28910f0014b";
 pub const MOOSE_VERSION: &str = "167ee97";
 pub const EXECUTABLE: &str = "/opt/moose/bin/moose-opt";
