@@ -2,7 +2,11 @@
 
 **Status:** Draft implementation under Adapter #34 / PR #49; bounded actual Native verification, *not merged into production*.
 **Source acceptance:** Adapter PR HEAD, pinned SOL Runtime v0.2, existing immutable Physics runtime image.
-**No new SOL API or scientific capability.**
+**No new SOL API or scientific capability.** **Current decision (2026-11-09):**
+the pinned Physics OCI image is the **default** for the supported Thermal 0.2 slice
+in this Draft. The exact Conda release compatibility test is **deferred,
+manual-only**, not passed or deleted. As long as PR #49 is unmerged,
+`main` is unchanged; publication/merge requires separate approval.
 
 ## Rationale and ownership
 
@@ -10,7 +14,7 @@ The historical Conda backend remains a distinct, immutable package target:
 `moose=2026.08.12=mpich`. Its package identity and `heat_transfer`
 copyable-input probe cannot be satisfied by a `physics-opt` executable.
 
-This opt-in **independent backend execution profile** reuses the previously
+The **default Thermal backend execution profile** reuses the previously
 validated Physics image without pretending it is a Conda package. Supported
 external semantic capability stays `thermal.steady_conduction` under frozen
 Adapter Protocol/Public Contract 0.2; the original SOL Runtime remains
@@ -26,7 +30,9 @@ built-from: ghcr.io/hyungseonsong-plasma/physics-build-base@sha256:2c3352da4f5c1
 MOOSE source: 9f388366ccf38b9c34542ec5561198249fde0ac9
 ENTRYPOINT: /opt/physics/physics-opt
 OS/arch: linux/amd64
-default backend: unchanged Conda moose-opt
+default backend: physics_oci_thermal_v1 (Draft PR #49 only)
+explicit Conda: SOL_MOOSE_BACKEND_PROFILE=conda with exact moose-opt/prefix
+Conda compatibility CI: workflow_dispatch manual opt-in, not PR/push required
 ```
 
 OCI readiness verifies the image is **already present locally**, its exact
@@ -40,14 +46,18 @@ remote pull, no mutable Docker tag, no inferred Conda prefix.
 # One-time controlled input acquisition, outside the adapter process.
 docker pull ghcr.io/hyungseonsong-plasma/physics-runtime@sha256:cda9f0d09a17aed5fa606e97d1ee5c3450f7280536cec2e5c635402bb07d972c
 
-# The external SOL Runtime caller launches this adapter binary.
-# No SOL_MOOSE_EXECUTABLE or SOL_MOOSE_CONDA_PREFIX in this profile.
-export SOL_MOOSE_BACKEND_PROFILE=physics_oci_thermal_v1
-unset SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
+# Physics OCI is selected automatically when no profile is configured.
+# No implicit fallback to Conda; image absence/mismatch is a hard error.
+unset SOL_MOOSE_BACKEND_PROFILE SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
 export SOL_MOOSE_WORKSPACE_ROOT=/absolute/private/workspace/root
 
-# Then run the existing frozen AP/PC0.2 consumer:
+# Then invoke the existing frozen AP/PC0.2 SOL consumer:
 # sol-external-runtime-v02-consumer run /absolute/path/sol-adaptor-moose request.json
+
+# If *explicitly* validating historical Conda compatibility instead:
+# export SOL_MOOSE_BACKEND_PROFILE=conda
+# export SOL_MOOSE_EXECUTABLE=/verified/prefix/bin/moose-opt
+# export SOL_MOOSE_CONDA_PREFIX=/verified/prefix
 ```
 
 The Adapter-generated MOOSE `input.i` remains a private backend artifact
@@ -65,7 +75,10 @@ this profile. Other references remain backend-local and noncanonical.
 
 ## Actual evidence / test contract
 
-CI invokes both independently:
+Routine PR/push CI requires **Physics OCI** execution and source V&V.
+The original exact-Conda compatibility job remains available only via manual
+`workflow_dispatch` with `run_conda_compatibility=true`. It is **SKIPPED**
+(not PASS) in ordinary PR/push checks. The OCI CI proves:
 
 1. Direct Adapter `validate_plan_v02` then
    `execute_plan_v02_with_run_key`: real pinned OCI image, real MOOSE
@@ -99,24 +112,26 @@ workflow is not green.
   a generic HIT text editing API, or an alternate runtime registry.
 - Does **not** replace scientific/field-value V&V, 2D plasma acceptance,
   or Physics #281 consumer cutover. These have independent authorities.
-- Does **not** bypass the previous required Conda CI gate or mark its
-  failure PASS. Transition of the required CI backend profile is a separately
-  reviewed **CI/contract-policy** decision after numerical and compatibility
-  evidence is accepted.
+- The user explicitly **deferred Conda as a mandatory CI check** and approved
+  OCI as the Thermal default on 2026-11-09. Exact Conda verification remains
+  an optional, manually dispatched compatibility check, with **no PASS
+  assertion** for its unresolved INL HTTP 502 and no equivalence claim.
+  Do not silently remove or auto-fallback to the Conda path.
 - Does **not** change the official packaged Adapter release or production
   consumers while this implementation remains Draft.
 
 Cross-references: Adapter #34, Draft PR #49, Draft #47, SOL #172,
 Physics #281, and closed read-only research PR #48.
 
-## Review-only handoff (A1 + B1 + C2 + D1 + E1, 2026-11-09)
+## Historical review-only handoff (earlier 2026-11-09 decision; default/Conda policy superseded above)
 
 - **A1**: Code review requested and recorded on Draft PR #49; this
   document and CI evidence do not constitute an independent third-party approval.
-- **B1**: OCI execution/source V&V and historical exact-Conda release
-  compatibility are separate CI results. An OCI PASS does not resolve
-  the still-failing Conda gate or turn the overall workflow green.
-  No ruleset, branch-protection or required-check policy is modified.
+- **B1 (historical)**: OCI execution/source V&V and exact-Conda release
+  compatibility were separate mandatory CI results. **Superseded by the
+  explicit current user decision:** OCI is the routine default required
+  check; Conda is deferred/manual-only and cannot be labeled PASS.
+  No branch ruleset/protection is changed.
 - **C2**: The existing bounded 400 K CSV/Exodus source V&V evidence is
   retained. Independent scientific acceptance is **deferred**, not
   granted or requested in this review cycle.
@@ -137,9 +152,10 @@ Physics #281, and closed read-only research PR #48.
   `tests/physics_oci_phase5_vv.rs` for OCI-only CSV+Exodus; PR #38
   retains ownership of Conda CSV+Exodus source-evidence changes.
 
-Local source-build backend evaluation, default profile switching,
-merging, release, Physics consumer migration, scientific signoff and
-SOL contract acceptance are all outside the approved scope.
+Local source-build backend evaluation, merging, release, Physics consumer
+migration, scientific signoff and SOL contract acceptance remain outside
+the approved scope. The **Draft-only OCI default switch is now explicitly
+approved**, without any `main` merge or production consumer cutover.
 
 ## Container lifetime hardening (Draft only, 2026-11-09)
 
@@ -167,5 +183,6 @@ scientific or Conda release equivalence.
 verifier in Draft #38; after a separately approved merge of #38,
 replace #49's test-only cross-Draft fetch with the repository-local
 canonical verifier, rerun exact-HEAD independent native and CI gates;
-only then review #49's own independent merge approval. No default
-switch, branch ruleset change or Local Build scope is authorized.
+only then review #49's own independent merge approval. The OCI
+default/Conda deferral is now explicitly approved **within the Draft**,
+but no branch ruleset change, merge or Local Build scope is authorized.
