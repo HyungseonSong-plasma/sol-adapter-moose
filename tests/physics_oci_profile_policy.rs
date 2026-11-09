@@ -67,12 +67,13 @@ fn unknown_or_conflicting_backend_profile_rejects_before_execution() {
     );
 
     // The historical Conda backend remains explicitly selectable, but a
-    // missing executable must still fail without attempting an OCI fallback.
+    // missing executable is UNAVAILABLE, not a falsely incompatible target;
+    // it must not trigger an implicit OCI fallback.
     let conda_no_executable = preflight_with_profile(Some("conda"), None);
     assert_eq!(conda_no_executable["result"]["kind"], "protocol_success");
     assert_eq!(
         conda_no_executable["result"]["payload"]["preflight"],
-        "rejected"
+        "unavailable"
     );
 }
 
