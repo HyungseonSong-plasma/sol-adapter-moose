@@ -289,6 +289,8 @@ jobs:
     needs: [scope, rust]
     if: needs.scope.outputs.backend_needed == 'true' && vars.MOOSE_CONDA_CI_ENABLED == 'true'
     runs-on: ubuntu-latest
+    env:
+      SOL_MOOSE_BACKEND: conda
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
