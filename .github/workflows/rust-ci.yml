@@ -33,7 +33,7 @@ jobs:
           assert manifest['schema_version'] == 2
           assert manifest['source_repository'] == 'HyungseonSong-plasma/chatgpt-operation'
           os_data = manifest['operating_system']
-          assert os_data['revision'] == '9b335e3fbb9c5e8e323e382daeec56fa25336822'
+          assert os_data['revision'] == '059050330a549fce0b543687e2e9d4dca6c3f624'
           assert os_data['expected_version'] == 'Samuel'
           assert re.fullmatch(r'[0-9a-f]{40}', os_data['revision'])
           assert alias['operating_system']['repository'] == manifest['source_repository']
@@ -268,7 +268,7 @@ jobs:
   moose-backend:
     needs: [scope, rust]
     if: needs.scope.outputs.backend_needed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -286,12 +286,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/miniforge/bin/conda" create -y \
-            -p "$RUNNER_TEMP/moose-env" \
-            --override-channels \
-            -c https://conda.software.inl.gov/public \
-            -c conda-forge \
-            'moose=2026.08.12=mpich'
+          # A transient INL 429/5xx must not be mistaken for a solver failure.
+          # Retry at most three times; other errors fail closed on first attempt.
+          mkdir -p target
+          conda_bin="$RUNNER_TEMP/miniforge/bin/conda"
+          for attempt in 1 2 3; do
+            log="target/phase1-conda-install-attempt-${attempt}.log"
+            if "$conda_bin" create -y \
+              -p "$RUNNER_TEMP/moose-env" \
+              --override-channels \
+              -c https://conda.software.inl.gov/public \
+              -c conda-forge \
+              'moose=2026.08.12=mpich' >"$log" 2>&1; then
+              cat "$log"
+              break
+            fi
+            cat "$log" >&2
+            if (( attempt == 3 )) || \
+               ! grep -Eq 'HTTP (429|500|502|503|504)([[:space:]]|$)' "$log"; then
+              echo "Non-transient or exhausted Conda installation failure" >&2
+              exit 1
+            fi
+            echo "INL channel transient HTTP error, retry ${attempt}/3" >&2
+            # Runner-owned, isolated target only; do not touch any user data.
+            rm -rf -- "$RUNNER_TEMP/moose-env"
+            sleep "$((attempt * 15))"
+          done
           echo "SOL_MOOSE_EXECUTABLE=$RUNNER_TEMP/moose-env/bin/moose-opt" >> "$GITHUB_ENV"
           echo "SOL_MOOSE_CONDA_PREFIX=$RUNNER_TEMP/moose-env" >> "$GITHUB_ENV"
           mkdir -p target
@@ -316,6 +336,35 @@ jobs:
           else
             printf 'expected=%s\narchive=not-retained-by-conda-cache\n' "$expected" \
               | tee target/phase1-package-sha256.txt
+          fi
+      - name: Diagnose default MOOSE MPI startup (non-accepting fallback)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/phase1-mpi-diagnostics
+          ldd "$SOL_MOOSE_EXECUTABLE" \
+            > target/phase1-mpi-diagnostics/ldd.log 2>&1 || true
+          ucx_info="$SOL_MOOSE_CONDA_PREFIX/bin/ucx_info"
+          if [[ -x "$ucx_info" ]]; then
+            "$ucx_info" -d \
+              > target/phase1-mpi-diagnostics/ucx-devices.log 2>&1 || true
+          fi
+          if "$SOL_MOOSE_EXECUTABLE" --version \
+            > target/phase1-mpi-diagnostics/default.stdout.log \
+            2> target/phase1-mpi-diagnostics/default.stderr.log; then
+            echo 'Unmodified MOOSE --version probe: PASS'
+          else
+            original_status=$?
+            echo 'Unmodified MOOSE --version probe: FAIL' >&2
+            cat target/phase1-mpi-diagnostics/default.stderr.log >&2
+            # Diagnostic only. This alternate transport is NEVER a substitute
+            # for a passing unmodified baseline or the full MOOSE test suite.
+            UCX_TLS=self,sm,tcp "$SOL_MOOSE_EXECUTABLE" --version \
+              > target/phase1-mpi-diagnostics/ucx-limited.stdout.log \
+              2> target/phase1-mpi-diagnostics/ucx-limited.stderr.log || true
+            echo 'UCX_TLS=self,sm,tcp diagnostic completed; baseline remains FAIL' >&2
+            cat target/phase1-mpi-diagnostics/ucx-limited.stderr.log >&2
+            exit "$original_status"
           fi
       - name: Exact backend probe and input validation
         run: cargo test --test moose_probe --locked -- --nocapture
@@ -355,6 +404,8 @@ jobs:
           name: moose-backend-evidence
           if-no-files-found: warn
           path: |
+            target/phase1-conda-install-attempt-*.log
+            target/phase1-mpi-diagnostics/*
             target/phase1-moose-probe.json
             target/phase1-moose-conda-meta.json
             target/phase1-conda-list.json
