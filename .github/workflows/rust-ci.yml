@@ -358,6 +358,8 @@ jobs:
           test -f target/phase5-vv-evidence/thermal-vv.json
       - name: Verify same-run source scalar and native Exodus T field
         shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           python3 -m pip install --disable-pip-version-check 'scipy==1.14.1'
