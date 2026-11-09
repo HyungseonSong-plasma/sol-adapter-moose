@@ -197,7 +197,9 @@ jobs:
               tests/moose_backend_workspace.rs \
               tests/phase5_conformance.rs \
               tests/phase5_thermal_vv.rs \
-              tests/fixtures/backend; then
+              tests/fixtures/backend \
+              scripts/provision_pinned_moose.py \
+              tests/test_provision_pinned_moose.py; then
             echo "backend_needed=false" >> "$GITHUB_OUTPUT"
           else
             echo "backend_needed=true" >> "$GITHUB_OUTPUT"
@@ -228,6 +230,8 @@ jobs:
       - name: Formatting
         if: steps.workspace.outputs.present == 'true'
         run: cargo fmt --all --check
+      - name: Pinned Conda provisioning self-tests (no MOOSE/network)
+        run: python3 -m unittest discover -s tests -p test_provision_pinned_moose.py -v
       - name: Tests
         if: steps.workspace.outputs.present == 'true'
         run: cargo test --workspace --locked
@@ -286,21 +290,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/miniforge/bin/conda" create -y \
-            -p "$RUNNER_TEMP/moose-env" \
-            --override-channels \
-            -c https://conda.software.inl.gov/public \
-            -c conda-forge \
-            'moose=2026.08.12=mpich'
+          python3 scripts/provision_pinned_moose.py \
+            --conda "$RUNNER_TEMP/miniforge/bin/conda" \
+            --prefix "$RUNNER_TEMP/moose-env" \
+            --receipt target/phase1-provisioning/receipt.json \
+            --attempts 2
           echo "SOL_MOOSE_EXECUTABLE=$RUNNER_TEMP/moose-env/bin/moose-opt" >> "$GITHUB_ENV"
           echo "SOL_MOOSE_CONDA_PREFIX=$RUNNER_TEMP/moose-env" >> "$GITHUB_ENV"
           mkdir -p target
           "$RUNNER_TEMP/miniforge/bin/conda" list -p "$RUNNER_TEMP/moose-env" --json \
             > target/phase1-conda-list.json
-          metadata=$(find "$RUNNER_TEMP/moose-env/conda-meta" -maxdepth 1 \
-            -name 'moose-*.json' -print -quit)
-          test -n "$metadata"
-          cp "$metadata" target/phase1-moose-conda-meta.json
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.provision_pinned_moose import copy_verified_moose_metadata
+          prefix = Path(os.environ['RUNNER_TEMP']) / 'moose-env'
+          output = Path('target/phase1-moose-conda-meta.json')
+          digest = copy_verified_moose_metadata(prefix, output)
+          print(f'EXACT_MOOSE_METADATA=PASS sha256={digest}')
+          PY
       - name: Verify retained package archive when available
         shell: bash
         run: |
@@ -355,6 +363,8 @@ jobs:
           name: moose-backend-evidence
           if-no-files-found: warn
           path: |
+            target/phase1-provisioning/receipt.json
+            target/phase1-provisioning/*.log
             target/phase1-moose-probe.json
             target/phase1-moose-conda-meta.json
             target/phase1-conda-list.json
