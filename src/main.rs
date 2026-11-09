@@ -7,6 +7,7 @@ use sol_adapter_transport::{
     TransportRequest,
 };
 use sol_adaptor_moose::execution_v02::ExecutionEnvironment;
+use sol_adaptor_moose::oci_profile::APPROVED_CANDIDATE_IMAGE;
 use sol_adaptor_moose::FoundationAdapter;
 use std::env;
 use std::io::{self, Read, Write};
@@ -23,30 +24,46 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let adapter = FoundationAdapter;
-    // Explicit research-only external-consumer selection. The default stays
-    // the exact Conda Phase 1 profile, with no implicit fallback to OCI.
-    let execution = if let Some(image) = env::var_os("SOL_MOOSE_OCI_CANDIDATE_IMAGE") {
-        let image = image
-            .into_string()
-            .map_err(|_| "experimental OCI image is not UTF-8".to_owned())?;
-        let pin = env::var("MOOSE_DOCKER_PIN")
-            .map_err(|_| "explicit OCI mode requires MOOSE_DOCKER_PIN".to_owned())?;
-        if pin != image {
-            return Err("OCI candidate image and invoked Docker pin disagree".to_owned());
+    // Consumer-owned backend selection, default OCI, no implicit Conda fallback.
+    // A missing OCI launcher returns an unavailable backend, rather than
+    // substituting an unverified executable or failing the describe operation.
+    let backend = env::var("SOL_MOOSE_BACKEND").unwrap_or_else(|_| "oci".to_owned());
+    let execution = match backend.as_str() {
+        "oci" => {
+            let image = env::var("SOL_MOOSE_OCI_CANDIDATE_IMAGE")
+                .unwrap_or_else(|_| APPROVED_CANDIDATE_IMAGE.to_owned());
+            if image != APPROVED_CANDIDATE_IMAGE {
+                return Err("unsupported OCI image digest (must use pinned candidate)".to_owned());
+            }
+            let workspace = env::var_os("SOL_MOOSE_WORKSPACE_ROOT")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| env::temp_dir().join("sol-adaptor-moose-runtime"));
+            match env::var_os("SOL_MOOSE_OCI_EXECUTABLE") {
+                Some(executable) => {
+                    // The existing candidate launcher requires this pin. This
+                    // check is configuration consistency, not executable custody.
+                    let pin = env::var("MOOSE_DOCKER_PIN")
+                        .map_err(|_| "OCI executable requires MOOSE_DOCKER_PIN".to_owned())?;
+                    if pin != image {
+                        return Err("OCI candidate image and invoked Docker pin disagree".to_owned());
+                    }
+                    ExecutionEnvironment::configured_official_oci_candidate(
+                        PathBuf::from(executable),
+                        &workspace,
+                        Duration::from_secs(120),
+                        &image,
+                    )
+                    .map_err(|error| format!("experimental OCI identity rejected: {error}"))?
+                }
+                None => ExecutionEnvironment::unavailable(workspace),
+            }
         }
-        let executable = env::var_os("SOL_MOOSE_OCI_EXECUTABLE")
-            .ok_or("explicit OCI mode requires SOL_MOOSE_OCI_EXECUTABLE")?;
-        let workspace = env::var_os("SOL_MOOSE_WORKSPACE_ROOT")
-            .ok_or("explicit OCI mode requires SOL_MOOSE_WORKSPACE_ROOT")?;
-        ExecutionEnvironment::configured_official_oci_candidate(
-            PathBuf::from(executable),
-            PathBuf::from(workspace),
-            Duration::from_secs(120),
-            &image,
-        )
-        .map_err(|error| format!("experimental OCI identity rejected: {error}"))?
-    } else {
-        ExecutionEnvironment::from_environment()
+        "conda" => ExecutionEnvironment::from_environment(),
+        other => {
+            return Err(format!(
+                "unsupported SOL_MOOSE_BACKEND={other:?}; expected oci or conda"
+            ))
+        }
     };
     let stdin = io::stdin();
     let stdout = io::stdout();
