@@ -87,10 +87,14 @@ fn parse_extremes(csv_path: &Path) -> (f64, f64) {
 
 #[test]
 fn explicit_oci_thermal_scalar_and_exodus_evidence_matches_benchmark() {
-    if std::env::var("SOL_MOOSE_BACKEND_PROFILE").ok().as_deref() != Some(OCI_PROFILE) {
-        eprintln!("OCI Phase 5 requires explicit profile; NOT_EVALUATED in the default test lane");
+    if std::env::var("SOL_MOOSE_NATIVE_OCI_TESTS").ok().as_deref() != Some("1") {
+        eprintln!("OCI Phase 5 source V&V requires explicit CI opt-in; NOT_EVALUATED");
         return;
     }
+    assert!(
+        std::env::var_os("SOL_MOOSE_BACKEND_PROFILE").is_none(),
+        "Phase 5 regression must exercise the OCI default without an override"
+    );
     assert!(
         std::env::var_os("SOL_MOOSE_EXECUTABLE").is_none(),
         "OCI V&V cannot mix a Conda executable"
