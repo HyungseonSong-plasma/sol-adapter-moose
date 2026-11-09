@@ -1,8 +1,8 @@
 use serde_json::json;
 use sol_adapter_protocol::ValidatePlanRequestV02;
 use sol_adaptor_moose::backend::{execute_backend_input, MooseProcessRunner, WorkspaceLayout};
-use sol_adaptor_moose::realization_v02::translate_steady_thermal_v02;
 use sol_adaptor_moose::physics_oci::PROFILE as OCI_PROFILE;
+use sol_adaptor_moose::realization_v02::translate_steady_thermal_v02;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -92,17 +92,17 @@ fn parse_extremes(csv_path: &Path) -> (f64, f64) {
 
 #[test]
 fn steady_thermal_slice_matches_predeclared_constant_field_benchmark() {
-    let is_oci = std::env::var("SOL_MOOSE_BACKEND_PROFILE")
-        .ok()
-        .as_deref()
-        == Some(OCI_PROFILE);
+    let is_oci = std::env::var("SOL_MOOSE_BACKEND_PROFILE").ok().as_deref() == Some(OCI_PROFILE);
     let executable = std::env::var_os("SOL_MOOSE_EXECUTABLE");
     if !is_oci && executable.is_none() {
         eprintln!("SOL_MOOSE_EXECUTABLE is unset; historical Conda Phase 5 V&V is skipped");
         return;
     }
     if is_oci {
-        assert!(executable.is_none(), "OCI V&V cannot mix a Conda executable");
+        assert!(
+            executable.is_none(),
+            "OCI V&V cannot mix a Conda executable"
+        );
         assert!(
             std::env::var_os("SOL_MOOSE_CONDA_PREFIX").is_none(),
             "OCI V&V cannot mix a Conda prefix"
@@ -153,7 +153,11 @@ fn steady_thermal_slice_matches_predeclared_constant_field_benchmark() {
             .map(|entry| entry.path())
             .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("e"))
             .collect::<Vec<_>>();
-        assert_eq!(field.len(), 1, "OCI V&V requires exactly one native Exodus field");
+        assert_eq!(
+            field.len(),
+            1,
+            "OCI V&V requires exactly one native Exodus field"
+        );
         assert!(fs::metadata(&field[0]).unwrap().len() > 1024);
     }
 
