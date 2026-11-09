@@ -367,7 +367,7 @@ jobs:
         run: |
           set -euo pipefail
           unset SOL_MOOSE_EXECUTABLE SOL_MOOSE_CONDA_PREFIX
-          cargo test --test phase5_thermal_vv --locked -- --nocapture
+          cargo test --test physics_oci_phase5_vv --locked -- --nocapture
           root=target/physics-oci-phase5/phase5-vv-evidence
           test -s "$root/thermal-vv.json"
           test -s "$root/runs/thermal-constant-field-vv/input_out.csv"
